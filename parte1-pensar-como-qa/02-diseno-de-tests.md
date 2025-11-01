@@ -1,11 +1,11 @@
 # Capítulo 2. Diseño de tests: de la intuición al método
 
-> Nota  
+> Nota
 > En este capítulo te voy a hablar como le hablo a mis alumnas que ya trabajaron en QA pero nunca vieron fundamentos. No voy a asumir que “ya sabés lo que es una partición de equivalencia”, pero tampoco te voy a tratar como si fuera tu primer día en tecnología. La idea es ordenar lo que ya hacés para que deje de ser intuitivo y pase a ser **repetible**.
 
 ## 2.1 El problema de probar “como venga”
 
-Algo que vi en todos los equipos donde trabajé (Estados Unidos, España, Argentina, UK, Alemania, Francia) es lo mismo: la mayoría de los testers **no tienen un método de diseño de pruebas**.  
+Algo que vi en todos los equipos donde trabajé (Estados Unidos, España, Argentina, UK, Alemania, Francia) es lo mismo: la mayoría de los testers **no tienen un método de diseño de pruebas**.
 Lo que tienen es **una mezcla de experiencia + costumbre + lo que hacía el equipo anterior**.
 
 Eso funciona… hasta que:
@@ -17,14 +17,14 @@ Eso funciona… hasta que:
 
 Ahí es donde se nota si el testing fue hecho “con buena voluntad” o “con diseño”.
 
-> Observación  
+> Observación
 > El autor de _Effective Software Testing_ dice exactamente esto: el problema no es que la gente no pruebe, es que **no prueba de forma sistemática**, y por eso dos personas distintas diseñan dos suites distintas para el mismo código. Lo que buscamos es que **cualquier persona razonable llegue a un conjunto de tests parecido** para el mismo problema.
 
 ---
 
 ## 2.2 Qué significa “diseñar” un test
 
-Diseñar un test no es “escribir un caso en TestRail”.  
+Diseñar un test no es “escribir un caso en TestRail”.
 Diseñar un test es **construir un escenario mínimo que demuestre un comportamiento relevante del sistema**.
 
 Ese escenario debe tener siempre:
@@ -36,7 +36,7 @@ Ese escenario debe tener siempre:
 
 Si falta el propósito, el caso existe “porque sí”. Ese es el que nadie quiere automatizar después.
 
-> Nota  
+> Nota
 > Cuando diseñes pensando en automatizar con Playwright, Postman/Newman o Jest, esto es clave: **la automatización no arregla un test mal diseñado**. Primero se diseña, después se ejecuta, y recién después se automatiza. Esto también lo marca el libro: primero derivamos los casos, después los pasamos a JUnit (o al framework que tengamos).
 
 ---
@@ -59,8 +59,7 @@ Esto es casi exactamente lo que hace el capítulo de **Specification-based testi
 
 ## 2.4 Paso 1: leer la especificación… de verdad
 
-Acá es donde la mayoría falla: leen el ticket como si fuera un requisito perfecto.  
-En la vida real el requisito:
+Acá es donde la mayoría falla: leen el ticket como si fuera un requisito perfecto.En la vida real el requisito:
 
 - está incompleto,
 - o está pensado solo para el caso “feliz”,
@@ -81,7 +80,7 @@ Variables que yo veo:
 
 Si no identificás variables, **no podés diseñar tests buenos**.
 
-> Aclaración  
+> Aclaración
 > Si el requisito no está completo, el test no es menos importante. Al revés: tu test se vuelve **una forma de descubrir requisitos faltantes**. Por eso los buenos QAs hacen preguntas.
 
 ---
@@ -115,24 +114,24 @@ Particiones obvias:
 
 ```mermaid
 graph TD
-    A[Input fechaNacimiento] --> B[Valida]
+    A[Input_fechaNacimiento] --> B[Valida]
     A --> C[Invalida]
-    B --> D[Formato correcto]
-    B --> E[Fecha futura]
-    C --> F[Formato incorrecto]
-    C --> G[Null o vacio]
-    B --> H[Casos limite (bisiesto)]
+    B --> D[Formato_correcto]
+    B --> E[Fecha_futura]
+    C --> F[Formato_incorrecto]
+    C --> G[Null_o_vacio]
+    B --> H[Casos_limite_bisiesto]
+
 ```
 
-> Nota  
+> Nota
 > En el PDF de _Specification-based testing_ el autor hace esto exactamente igual: primero analiza cada parámetro por separado (null, vacío, un elemento, varios elementos, ceros a la izquierda) y recién después analiza la relación entre parámetros. Nosotros vamos a hacer lo mismo.
 
 ---
 
 ## 2.6 Paso 3: análisis de valores límite
 
-Los límites son donde el software más se rompe.  
-Qué es un límite:
+Los límites son donde el software más se rompe.Qué es un límite:
 
 - el mínimo permitido,
 - el máximo permitido,
@@ -158,14 +157,14 @@ graph LR
     F --> G[66]
 ```
 
-> Observación  
+> Observación
 > Esto parece básico, pero es lo que más falta cuando reviso test suites reales de equipos que automatizaron “a lo bestia”: tienen el caso feliz, pero no tienen el 17 ni el 66. Y después dicen “Playwright no encontró nada”. Claro, si no le diste escenarios que rompan reglas, no va a encontrar nada.
 
 ---
 
 ## 2.7 Paso 4: analizar relaciones entre parámetros
 
-Hasta acá probaste cada parámetro por separado.  
+Hasta acá probaste cada parámetro por separado.
 Ahora hay que ver **cómo se combinan**.
 
 En sistemas de negocio esto pasa todo el tiempo. Ejemplos que vi trabajando para equipos de UK y Alemania:
@@ -194,7 +193,7 @@ Ejemplo en tabla:
 | operador | aprobado          | no                 |
 | invitado | pendiente         | no                 |
 
-> Nota  
+> Nota
 > Acá es donde una QA que solo ejecuta se queda sin herramientas. La que diseña, en cambio, puede discutir la regla con producto y decir “tu lógica tiene huecos”.
 
 ---
@@ -228,7 +227,7 @@ Riesgo cubierto: flujo feliz
 Automatizable: si
 ```
 
-> Aclaracion  
+> Aclaracion
 > El libro de _Effective Software Testing_ insiste en separar **diseño** de **ejecución** y de **automatización**. El test nace aquí, en el diseño. La automatización es solo la forma de ejecutarlo muchas veces. Si saltás directo a Playwright sin este paso, tu suite va a crecer desordenada.
 
 ---
@@ -286,7 +285,7 @@ Casos resultantes (resumen):
 6. Peso 25, international, no AR, sin descuento -> 60.
 7. Peso 10, express, no AR, con AIKO10 -> 27.
 
-> Nota  
+> Nota
 > Fijate que todos los casos tienen una razón. No hay “probar con 5 kg porque sí”. Esto es lo que diferencia una suite hecha a mano de una suite **diseñada**.
 
 ---
@@ -295,20 +294,20 @@ Casos resultantes (resumen):
 
 Podés usar citas de Markdown así:
 
-> Observacion del tester  
+> Observacion del tester
 > En mobile con red lenta, la pantalla de pago tarda demasiado y no hay loader. Esto no es un bug funcional pero es una condicion de prueba que deberiamos repetir.
 
-> Nota tecnica  
+> Nota tecnica
 > Este endpoint devuelve 200 aun cuando el dato no existe. Hablar con backend para ver si se puede devolver 404 o 204.
 
-> Riesgo detectado  
+> Riesgo detectado
 > Si agregamos un nuevo tipo de envio, todos los tests que dependen del enum "ShippingType" van a romper. Conviene centralizar fixtures.
 
 ---
 
 ## 2.11 Relación con automatización (avanzado)
 
-> Nota  
+> Nota
 > La automatización solo tiene valor a partir de la segunda corrida. La primera vez el valor lo puso el humano que diseñó el test. Si tu diseño es pobre, tu automatización va a ser pobre. Esto parece obvio, pero lo he visto repetirse en empresas de Estados Unidos y también en pymes de Argentina: el problema no era Selenium, era el diseño.
 
 ---
