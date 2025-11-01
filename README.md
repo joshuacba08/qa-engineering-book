@@ -46,6 +46,7 @@ El libro está dividido en 5 partes:
 ## Mapa del repositorio
 
 ```shell
+
 qa-engineering-book/
 │
 ├── README.md
@@ -116,5 +117,5 @@ qa-engineering-book/
 
 ## Licencia
 
-Este contenido se distribuye bajo la licencia **Creative Commons CC BY-SA 4.0**,  
+Este contenido se distribuye bajo la licencia **Creative Commons CC BY-SA 4.0**,
 permitiendo su uso y adaptación con atribución.
