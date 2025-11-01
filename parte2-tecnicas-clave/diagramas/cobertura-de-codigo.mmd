@@ -1,0 +1,9 @@
+graph TD
+    A[Codigo_fuente] --> B[Cobertura_lineas]
+    A --> C[Cobertura_ramas]
+    A --> D[Cobertura_condiciones]
+    A --> E[Cobertura_caminos]
+    B --> F[Medicion_con_Istanbul_o_Jest]
+    C --> F
+    D --> F
+    E --> F
