@@ -1,16 +1,8 @@
 graph TD
-    A[Entrada_dato] --> B{Dato_valido?}
+    A[Entrada_dato] --> B{Dato_valido}
     B -->|No| C[Mostrar_error_de_formato]
-    B -->|Si| D{Dato_dentro_de_rango?}
+    B -->|Si| D{Dato_en_rango}
     D -->|No| E[Rechazar_y_mostrar_mensaje]
-    D -->|Si| F{Regla_de_negocio_valida?}
+    D -->|Si| F{Regla_de_negocio_valida}
     F -->|No| G[Mostrar_alerta_de_regla]
     F -->|Si| H[Procesar_y_guardar_dato]
-
-    classDef decision fill=#FFF8E1,stroke=#F57F17,stroke-width=1px,color=#BF360C;
-    classDef action fill=#E3F2FD,stroke=#1565C0,stroke-width=1px,color=#0D47A1;
-    classDef result fill=#E8F5E9,stroke=#2E7D32,stroke-width=1px,color=#1B5E20;
-
-    class B,D,F decision;
-    class C,E,G action;
-    class H result;
