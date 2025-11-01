@@ -1,0 +1,23 @@
+graph TD
+    A[Software_en_desarrollo] --> B[Areas_de_riesgo]
+    B --> C[Riesgo_funcional]
+    B --> D[Riesgo_tecnico]
+    B --> E[Riesgo_integracion]
+    B --> F[Riesgo_performance]
+    B --> G[Riesgo_seguridad]
+
+    C --> C1[Testing_de_requisitos]
+    D --> D1[Testing_de_codigo]
+    E --> E1[Testing_de_integracion]
+    F --> F1[Pruebas_de_carga_y_stress]
+    G --> G1[Pentesting_y_validacion_de_autenticacion]
+
+    classDef functional fill=#E8F5E9,stroke=#2E7D32,stroke-width=1px,color=#1B5E20;
+    classDef technical fill=#E3F2FD,stroke=#1565C0,stroke-width=1px,color=#0D47A1;
+    classDef integration fill=#FFF3E0,stroke=#EF6C00,stroke-width=1px,color=#E65100;
+    classDef risk fill=#F3E5F5,stroke=#6A1B9A,stroke-width=1px,color=#4A148C;
+
+    class C,C1 functional;
+    class D,D1 technical;
+    class E,E1 integration;
+    class F,F1,G,G1 risk;
