@@ -1,104 +1,143 @@
-# Capítulo 2. Diseño de tests: de la intuición al método
+﻿# Capítulo 2 · Diseño de tests: de la intuición al método
 
-> Nota
-> En este capítulo te voy a hablar como le hablo a mis alumnas que ya trabajaron en QA pero nunca vieron fundamentos. No voy a asumir que “ya sabés lo que es una partición de equivalencia”, pero tampoco te voy a tratar como si fuera tu primer día en tecnología. La idea es ordenar lo que ya hacés para que deje de ser intuitivo y pase a ser **repetible**.
+> _«Testing shows the presence, not the absence, of bugs.»_
+> — **Edsger W. Dijkstra**, _Notes on Structured Programming_ (1972)
 
-## 2.1 El problema de probar “como venga”
+---
 
-Algo que vi en todos los equipos donde trabajé (Estados Unidos, España, Argentina, UK, Alemania, Francia) es lo mismo: la mayoría de los testers **no tienen un método de diseño de pruebas**.
-Lo que tienen es **una mezcla de experiencia + costumbre + lo que hacía el equipo anterior**.
+## Lo que vas a aprender en este capítulo
 
-Eso funciona… hasta que:
+Al terminar este capítulo vas a poder:
 
-- el sistema crece,
-- aparecen cambios de reglas de negocio,
-- hay que automatizar,
-- o hay que justificar por qué algo no se probó.
+- [x] Distinguir cuándo un caso de prueba está **diseñado** y cuándo está **improvisado**.
+- [x] Aplicar un **pipeline mental de 7 pasos** para derivar tests desde una especificación.
+- [x] Construir **particiones de equivalencia** y **análisis de valores límite (BVA)** con criterios formales (Myers, Jorgensen).
+- [x] Modelar reglas de negocio con **tablas de decisión** y ciclos de vida con **state transition testing**.
+- [x] Usar **pairwise / all-pairs** para domar la explosión combinatoria sin perder cobertura.
+- [x] Reconocer y mitigar el **Oracle Problem** combinando oráculos especificados, derivados, implícitos, parciales y metamórficos.
 
-Ahí es donde se nota si el testing fue hecho “con buena voluntad” o “con diseño”.
+> **Nivel:** intermedio · **Tiempo de lectura:** ~45 min · **Pre-requisito:** Capítulo 1 (Propósito del testing).
 
-> Observación
-> El autor de _Effective Software Testing_ dice exactamente esto: el problema no es que la gente no pruebe, es que **no prueba de forma sistemática**, y por eso dos personas distintas diseñan dos suites distintas para el mismo código. Lo que buscamos es que **cualquier persona razonable llegue a un conjunto de tests parecido** para el mismo problema.
+---
+
+## Mapa de ruta del capítulo
+
+```mermaid
+flowchart LR
+    A[2.1 Probar 'como venga'] --> B[2.2 Qué es diseñar un test]
+    B --> C[2.3 Pipeline mental]
+    C --> D[2.4 Leer la especificación]
+    D --> E[2.5 Particiones de equivalencia]
+    E --> F[2.6 Boundary Value Analysis]
+    F --> G[2.7 Tablas de decisión]
+    G --> H[2.8 State Transition]
+    H --> I[2.9 Pairwise / All-Pairs]
+    I --> J[Resumen + Ejercicios]
+```
+
+> **Nota del autor**
+> En este capítulo te voy a hablar como le hablo a mis alumnas que ya trabajaron en QA pero nunca vieron fundamentos. No voy a asumir que ya sabés qué es una partición de equivalencia, pero tampoco te voy a tratar como si fuera tu primer día en tecnología. La idea es **ordenar lo que ya hacés** para que deje de ser intuitivo y pase a ser **repetible, comunicable y auditable**.
+
+---
+
+## 2.1 El problema de probar "como venga"
+
+Algo que vi en todos los equipos donde trabajé —Estados Unidos, España, Argentina, Reino Unido, Alemania, Francia— se repite con asombrosa consistencia: la mayoría de los testers **no tienen un método de diseño de pruebas**. Lo que tienen es una mezcla de **experiencia + costumbre + lo que hacía el equipo anterior**.
+
+Esa receta funciona… hasta que:
+
+| Disparador | Síntoma típico |
+| --- | --- |
+| El sistema **crece** | "Cada release rompe algo distinto que ya estaba probado." |
+| Cambian las **reglas de negocio** | "No sabemos qué tests hay que actualizar." |
+| Hay que **automatizar** | "El test pasa, pero no sé qué está validando." |
+| Auditoría / postmortem | "No podemos justificar por qué eso no se probó." |
+
+Ahí se nota la diferencia entre testing hecho **con buena voluntad** y testing hecho **con diseño**.
+
+> **Observación de campo**
+> El autor de _Effective Software Testing_ (Aniche, 2022) dice exactamente esto: el problema no es que la gente no pruebe, es que **no prueba de forma sistemática**. Por eso dos testers distintos diseñan dos suites distintas para el mismo código. La meta es que **cualquier persona razonable llegue a un conjunto de tests parecido** para el mismo problema. A eso le llamamos **reproducibilidad metodológica**.
+
+> **⚠️ Antipatrón: "Testing por intuición pura"**
+> Cuando el único criterio para decidir qué probar es _"se me ocurrió"_, el resultado es una suite que cubre lo que el tester ya conoce y deja descubierto lo que ignora. **El sesgo de confirmación** se vuelve la principal estrategia de selección.
 
 ---
 
 ## 2.2 Qué significa "diseñar" un test
 
-Diseñar un test no es "escribir un caso en TestRail".
-Diseñar un test es **construir un escenario mínimo que demuestre un comportamiento relevante del sistema**.
+> **Definición — Test diseñado**
+> Un test diseñado es **un escenario mínimo, reproducible y auditable** que demuestra un comportamiento relevante del sistema bajo prueba (SUT) y cuyo propósito —el riesgo que cubre— está explícito.
 
-Ese escenario debe tener siempre:
+Diseñar un test **no es** "escribir un caso en TestRail". Es construir cuatro piezas que, juntas, justifican la existencia del caso:
 
-1. **Contexto** (precondiciones): qué tenía que cumplirse antes.
-2. **Acción**: qué hace el usuario o el sistema.
-3. **Oráculo** (lo esperado): cómo sé si pasó o no.
-4. **Propósito**: qué riesgo cubre.
+### La anatomía de un buen test
 
-Si falta el propósito, el caso existe "porque sí". Ese es el que nadie quiere automatizar después.
+```mermaid
+flowchart LR
+    A["① Contexto<br/>(precondiciones)"] --> B["② Acción<br/>(estímulo)"]
+    B --> C["③ Oráculo<br/>(resultado esperado)"]
+    C --> D["④ Propósito<br/>(riesgo cubierto)"]
+    style D fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+```
 
-> Nota
-> Cuando diseñes pensando en automatizar con Playwright, Postman/Newman o Jest, esto es clave: **la automatización no arregla un test mal diseñado**. Primero se diseña, después se ejecuta, y recién después se automatiza. Esto también lo marca el libro: primero derivamos los casos, después los pasamos a JUnit (o al framework que tengamos).
+| # | Pieza | Pregunta que responde | Ejemplo |
+| --- | ------- | ---------------------- | --------- |
+| ① | **Contexto** | ¿Qué tenía que cumplirse antes? | "Usuario autenticado con saldo > 0." |
+| ② | **Acción** | ¿Qué hace el usuario o el sistema? | "Solicita una transferencia de $100." |
+| ③ | **Oráculo** | ¿Cómo sé si pasó o falló? | "El saldo final disminuye en $100 exactos." |
+| ④ | **Propósito** | ¿Qué riesgo cubre este caso? | "Evitar pérdida monetaria por redondeo." |
 
-### El Problema del Oráculo (Oracle Problem)
+> **💡 Idea clave**
+> Si falta el **propósito**, el caso existe "porque sí". Es exactamente el caso que nadie quiere automatizar después… y el primero que se borra cuando hay que limpiar la suite.
+
+> **En la práctica — Diseño antes que automatización**
+> Cuando pienses en automatizar con Playwright, Postman/Newman o Jest: **la automatización no arregla un test mal diseñado**. El orden correcto es: ① diseñar → ② ejecutar manualmente para validar el oráculo → ③ automatizar. Aniche (2022) lo dice claro: primero derivamos los casos, después los pasamos a JUnit (o al framework que toque).
+
+---
+
+### 2.2.1 El Problema del Oráculo (Oracle Problem)
 
 Uno de los desafíos fundamentales del testing fue identificado por **Elaine Weyuker** en 1982:
 
-> "Para algunos programas, es imposible o impracticable determinar si el output es correcto sin ejecutar manualmente todo el proceso que el programa debería automatizar."
+> _"Para algunos programas, es imposible o impracticable determinar si el output es correcto sin ejecutar manualmente todo el proceso que el programa debería automatizar."_
+> — Weyuker, _On Testing Non-Testable Programs_ (1982)
 
-Este es el **Oracle Problem**: ¿cómo sabemos que el resultado es correcto?
+> **Definición — Oracle Problem**
+> El problema de decidir, para una entrada dada, **cuál es el resultado correcto que debería producir el sistema**. Sin oráculo no hay test: hay solo un experimento sin hipótesis.
 
-#### Tipos de Oráculos de Prueba
+#### Tipos de oráculo (Barr et al., 2015)
 
-Según **Barr et al.** (2015) en su survey "The Oracle Problem in Software Testing", existen varios tipos de oráculos:
+| # | Tipo | En qué se basa | Ventaja | Limitación |
+| --- | ------ | ---------------- | --------- | ------------ |
+| 1 | **Specified Oracle** | Especificación formal | Precisión total | Requiere especificación completa |
+| 2 | **Derived Oracle** | Versión previa o sistema similar | Fácil de implementar | Propaga bugs heredados |
+| 3 | **Implicit Oracle** | Propiedades universales (no crash, no leak) | Siempre aplicable | Solo detecta fallos catastróficos |
+| 4 | **Partial Oracle** | Verifica solo aspectos clave | Bajo costo | Pierde defectos sutiles |
+| 5 | **Pseudo Oracle** | Aproximación heurística (IA, sistemas no-deterministas) | Permite testear lo "no testeable" | No es 100% confiable |
 
-**1. Specified Oracle (Oráculo Especificado)**
-- Basado en especificación formal del comportamiento
-- Ejemplo: Documentación que dice "la función debe retornar la raíz cuadrada"
-- **Ventaja:** Precisión total
-- **Desventaja:** Requiere especificación completa y sin ambigüedades
+**Tabla 2.1** — Taxonomía de oráculos según Barr, Harman, McMinn, Shahbaz & Yoo (2015).
 
-**2. Derived Oracle (Oráculo Derivado)**
-- Compara con versión anterior o sistema similar
-- Ejemplo: Testing de regresión comparando con versión previa
-- **Ventaja:** Fácil de implementar
-- **Desventaja:** Propaga bugs de la versión original
+#### Ejemplo aplicado: ¿cómo testeo un compresor?
 
-**3. Implicit Oracle (Oráculo Implícito)**
-- Propiedades universales que siempre deben cumplirse
-- Ejemplo: "el sistema no debe crashear", "no memory leaks"
-- **Ventaja:** Siempre aplicable
-- **Desventaja:** Solo detecta fallas catastróficas
+> **Caso de estudio**
+> No tengo cómo predecir el buffer binario exacto que produce `gzip` para una entrada dada. ¿Significa que no puedo testearlo? No: significa que necesito **combinar varios oráculos**.
 
-**4. Partial Oracle (Oráculo Parcial)**
-- Solo verifica aspectos específicos del output
-- Ejemplo: Solo verificar que el formato JSON es válido, no el contenido
-- **Ventaja:** Más fácil de implementar que oráculo completo
-- **Desventaja:** Puede perder defectos sutiles
-
-**5. Pseudo Oracle (Pseudo Oráculo)**
-- Aproximación cuando el oráculo perfecto no existe
-- Ejemplo: Testing de sistemas de IA con outputs creativos
-- **Ventaja:** Permite testing de sistemas "no deterministas"
-- **Desventaja:** No es 100% confiable
-
-#### Ejemplo Práctico: Sistema de Compresión
+**Listing 2.1** — Cinco enfoques de oráculo aplicados a una función de compresión.
 
 ```typescript
-// Función que comprime datos
+// Función bajo prueba
 function compress(data: string): Buffer {
   const zlib = require('zlib');
   return zlib.gzipSync(Buffer.from(data));
 }
 
-// ¿Cómo verificar que el output es correcto?
-
-// ❌ DIFÍCIL: Verificar el buffer comprimido exacto
+// ❌ ANTIPATRÓN — Specified oracle exacto sobre output binario (frágil)
 test('Compressed output matches expected binary', () => {
   const result = compress("Hello World");
-  expect(result).toEqual(Buffer.from([0x1f, 0x8b, ...])); // Muy frágil
+  expect(result).toEqual(Buffer.from([0x1f, 0x8b, /_ ... _/]));
 });
 
-// ✅ MEJOR: Usar Derived Oracle (reversibilidad)
+// ✅ Derived Oracle — reversibilidad: f⁻¹(f(x)) === x
 test('Decompression of compressed data returns original', () => {
   const zlib = require('zlib');
   const original = "Hello World";
@@ -107,124 +146,138 @@ test('Decompression of compressed data returns original', () => {
   expect(decompressed).toBe(original);
 });
 
-// ✅ MEJOR: Usar Partial Oracle (propiedades)
-test('Compressed data is smaller than original', () => {
+// ✅ Partial Oracle — propiedad observable (no validamos el contenido exacto)
+test('Compressed data is smaller than original for repetitive input', () => {
   const original = "A".repeat(1000);
   const compressed = compress(original);
   expect(compressed.length).toBeLessThan(original.length);
 });
 
-// ✅ MEJOR: Usar Implicit Oracle
+// ✅ Implicit Oracle — el sistema no debe colapsar
 test('Compress does not crash with large input', () => {
   const largeData = "X".repeat(1_000_000);
   expect(() => compress(largeData)).not.toThrow();
 });
 ```
 
-#### Estrategias para Resolver el Oracle Problem
+#### Estrategias para resolver el Oracle Problem
 
-**1. Usar propiedades matemáticas:**
-- Ejemplo: `sqrt(x)² ≈ x`
-- Ejemplo: `reverse(reverse(array)) === array`
+| Estrategia | Cómo funciona | Cuándo usarla |
+| ----------- | --------------- | --------------- |
+| **Propiedades matemáticas** | $\sqrt{x}^2 \approx x$, `reverse(reverse(a)) === a` | Funciones puras y algoritmos |
+| **Implementación alternativa** | Comparar dos implementaciones independientes | Refactors críticos, migraciones |
+| **Test fixtures conocidos** | Snapshot de casos verificados a mano | Reglas de negocio estables |
+| **Metamorphic Testing** | Relación entre inputs: $f(x_1) \le f(x_2)$ si $x_1 \subseteq x_2$ | Sistemas no-determinísticos, ML, búsqueda |
 
-**2. Comparar con implementación alternativa:**
-- Implementar el mismo algoritmo de forma diferente
-- Comparar resultados (solo deben diferir si hay bug)
-
-**3. Usar casos conocidos (test fixtures):**
-- Crear conjunto de casos con output conocido
-- Limitación: Solo cubre esos casos específicos
-
-**4. Metamorphic Testing:**
-- Definir relaciones entre inputs relacionados
-- Ejemplo: `f(x) + f(y) = f(x+y)` para funciones lineales
+**Listing 2.2** — Metamorphic testing aplicado a un sistema de búsqueda.
 
 ```typescript
-// Ejemplo: Metamorphic Testing para sistema de búsqueda
-test('Búsqueda con término más específico retorna subset', () => {
+test('Búsqueda con término más específico retorna un subset', () => {
   const results1 = buscar("test");
   const results2 = buscar("testing");
-  
-  // Propiedad metamórfica: término más específico → menos resultados
+
+  // Relación metamórfica: input más específico ⇒ resultados ⊆
   expect(results2.length).toBeLessThanOrEqual(results1.length);
-  
-  // Todos los resultados de búsqueda específica deben estar en genérica
+
   results2.forEach(item => {
     expect(results1).toContainEqual(item);
   });
 });
 ```
 
-> 💡 **Observación:** En la práctica, casi nunca tenemos un oráculo perfecto. La clave es combinar múltiples tipos de oráculos para aumentar la confianza.
+> **Resumen rápido — Oracle Problem**
+> En la práctica casi nunca tenemos un oráculo perfecto. La estrategia profesional es **componer** múltiples oráculos parciales (reversibilidad + propiedades + invariantes implícitas) hasta obtener una confianza acumulada alta.
 
 ---
 
 ## 2.3 El pipeline mental para diseñar pruebas
 
+Diseñar tests no es magia: es un **flujo iterativo de 7 pasos** que cualquier QA puede ejecutar con disciplina.
+
+**Figura 2.1** — Pipeline de derivación de casos de prueba.
+
 ```mermaid
-graph TD
-    A[Leer la especificacion] --> B[Identificar entradas y salidas]
-    B --> C[Definir particiones de equivalencia]
-    C --> D[Detectar limites]
-    D --> E[Combinar parametros relevantes]
-    E --> F[Definir casos de prueba]
-    F --> G[Marcar cuales se automatizan]
+flowchart TD
+    A([1 · Leer la especificación]) --> B([2 · Identificar entradas y salidas])
+    B --> C([3 · Definir particiones de equivalencia])
+    C --> D([4 · Detectar límites])
+    D --> E([5 · Combinar parámetros relevantes])
+    E --> F([6 · Definir casos de prueba])
+    F --> G([7 · Marcar cuáles se automatizan])
+    G -.feedback.-> C
+    style A fill:#dbeafe,stroke:#2563eb
+    style G fill:#dcfce7,stroke:#16a34a
 ```
 
-Esto es casi exactamente lo que hace el capítulo de **Specification-based testing**: primero mira parámetros, después piensa en valores válidos e inválidos, después mira relaciones entre parámetros y después arma los casos. El autor mismo dice que en la práctica es **iterativo**, no lineal: podés volver atrás cuando descubrís una partición que te faltó.
+Esto se alinea casi 1:1 con la metodología de **Specification-based testing** descrita por Aniche (2022): primero parámetros, después valores válidos e inválidos, después relaciones entre parámetros, y recién entonces los casos.
+
+> **Iterativo, no lineal**
+> El propio Aniche aclara que en la práctica **volvés atrás** cuando descubrís una partición que te faltó. La flecha de feedback en la figura no es decorativa: es la regla, no la excepción.
 
 ---
 
-## 2.4 Paso 1: leer la especificación… de verdad
+## 2.4 Paso 1 · Leer la especificación… de verdad
 
-Acá es donde la mayoría falla: leen el ticket como si fuera un requisito perfecto.En la vida real el requisito:
+Acá es donde la mayoría falla: leen el ticket como si fuera un requisito perfecto. En la vida real el requisito:
 
-- está incompleto,
-- o está pensado solo para el caso “feliz”,
-- o no dice qué pasa con datos raros.
+- está **incompleto**,
+- está pensado solo para el **caso feliz**, o
+- **no dice qué pasa con datos raros** (¿qué hago si el campo viene en `null`?).
 
-Entonces, cuando hago QA con equipos de Estados Unidos o Alemania, lo primero que hago es **desarmar el requisito en variables**.
+> **Técnica — Desarmar el requisito en variables**
+> Cuando hago QA con equipos en USA o Alemania, lo primero que hago al recibir un ticket es traducirlo a una **lista de variables de entrada y salida**. Si no puedo nombrarlas, el requisito no está listo para diseñar tests.
 
-Ejemplo sencillo: “El sistema debe calcular el costo de estacionamiento por día”.
+#### Ejemplo guiado
 
-Variables que yo veo:
+> **Requisito:** _"El sistema debe calcular el costo de estacionamiento por día."_
 
-- tipo de vehículo,
-- fecha/hora de entrada,
-- fecha/hora de salida,
-- reglas por día (fines de semana, feriados),
-- descuentos,
-- límites de días.
+Variables que un QA entrenado detecta:
 
-Si no identificás variables, **no podés diseñar tests buenos**.
+| Variable | Tipo | Notas |
+| ---------- | ------ | ------- |
+| Tipo de vehículo | enum | auto, moto, camión |
+| Fecha/hora de entrada | datetime | ¿zona horaria? |
+| Fecha/hora de salida | datetime | ¿puede ser anterior a la entrada? |
+| Día (laborable / fin de semana / feriado) | enum derivado | ¿calendario regional? |
+| Descuentos | bool / código | ¿stackeable? |
+| Límite máximo de días | int | ¿qué pasa si excede? |
 
-> Aclaración
-> Si el requisito no está completo, el test no es menos importante. Al revés: tu test se vuelve **una forma de descubrir requisitos faltantes**. Por eso los buenos QAs hacen preguntas.
+> **💡 Idea clave**
+> Si no podés enumerar las **variables**, no podés diseñar tests buenos. Y si la especificación no las cubre, **tu lista se vuelve la primera lista de preguntas para el PO**.
+
+> **Tip pro — Los tests también descubren requisitos**
+> Si el requisito está incompleto, el test no es menos importante: al revés, **se vuelve la herramienta para descubrir lo que falta**. Por eso los buenos QA hacen preguntas en el refinamiento, no después del bug en producción.
 
 ---
 
-## 2.5 Paso 2: particiones de equivalencia
+## 2.5 Paso 2 · Particiones de equivalencia
 
-La idea es simple: **si dos entradas son tratadas igual por el sistema, no necesito probar las dos**. Probar una representa a la otra.
+> **Definición — Partición de equivalencia (EP)**
+> Subconjunto del dominio de entrada en el que **se asume que el sistema se comporta de forma idéntica**. Si elegís un representante de la clase y el test pasa, la hipótesis dice que pasa para todos los elementos de la clase.
 
-### Fundamento Teórico
+La idea es brutal de simple: **si dos entradas son tratadas igual por el sistema, no necesito probar las dos**. Una representa a la otra.
 
-Según **Myers, Sandler & Badgett** (2011) en "The Art of Software Testing":
+### 2.5.1 Fundamento teórico
 
-> "Una clase de equivalencia representa un conjunto de estados válidos o inválidos para las condiciones de entrada. El testing de particiones se basa en la hipótesis de que el software tratará todos los elementos de una clase de manera idéntica."
+> _"Una clase de equivalencia representa un conjunto de estados válidos o inválidos para las condiciones de entrada. El testing de particiones se basa en la hipótesis de que el software tratará todos los elementos de una clase de manera idéntica."_
+> — **Myers, Sandler & Badgett**, _The Art of Software Testing_ (3.ª ed., 2011)
 
-Esta hipótesis se llama **Assumption of Uniform Behavior** (Suposición de Comportamiento Uniforme).
+Esta hipótesis recibe el nombre de **Assumption of Uniform Behavior** (Suposición de Comportamiento Uniforme). Su consecuencia operativa:
 
-**Implicación práctica:** Si el test pasa para UN valor de la clase, debería pasar para TODOS los valores de esa clase.
+> **💡 Consecuencia práctica**
+> Si el test pasa para **un** valor de la clase, debería pasar para **todos** los valores de la clase. Por eso 1 test por partición es, en teoría, suficiente. En la práctica, complementás con BVA (sección 2.6) para no creerle del todo a la hipótesis.
 
-### Ejemplo mejorado con TypeScript
+### 2.5.2 Caso guiado: `calcularEdad`
 
-El siguiente código tiene un problema común:
+> **⚠️ Antipatrón a refactorizar primero**
+> El siguiente código no es testeable porque depende de la fecha del sistema. **Antes de diseñar tests, hacé el código testeable.** Esto es _design for testability_.
+
+**Listing 2.3** — Versión inicial: dependencia oculta de `Date.now()`.
 
 ```typescript
-// ❌ PROBLEMA: Fecha hardcodeada, no es testeable
+// ❌ Fecha "ahora" hardcodeada/oculta → imposible de testear deterministamente
 function calcularEdad(fechaNacimiento: string): number {
-  const hoy = new Date("2025-11-01"); // ← Mal: fecha fija
+  const hoy = new Date("2025-11-01"); // ← acoplamiento al reloj
   const cumple = new Date(fechaNacimiento);
   let edad = hoy.getFullYear() - cumple.getFullYear();
   const m = hoy.getMonth() - cumple.getMonth();
@@ -235,7 +288,7 @@ function calcularEdad(fechaNacimiento: string): number {
 }
 ```
 
-**Solución: Inyección de dependencia para la fecha actual**
+**Listing 2.4** — Refactor con **inyección de dependencia** del reloj.
 
 ```typescript
 interface AgeCalculatorOptions {
@@ -246,236 +299,198 @@ function calcularEdad(
   fechaNacimiento: string,
   options: AgeCalculatorOptions = {}
 ): number {
-  const hoy = options.today || new Date();
+  const hoy = options.today ?? new Date();
   const cumple = new Date(fechaNacimiento);
-  
-  // Validación
+
   if (isNaN(cumple.getTime())) {
     throw new Error('Fecha de nacimiento inválida');
   }
-  
   if (cumple > hoy) {
     throw new Error('Fecha de nacimiento no puede ser futura');
   }
-  
+
   let edad = hoy.getFullYear() - cumple.getFullYear();
   const m = hoy.getMonth() - cumple.getMonth();
-  
   if (m < 0 || (m === 0 && hoy.getDate() < cumple.getDate())) {
     edad--;
   }
-  
   return edad;
 }
 ```
 
-### Particiones de Equivalencia Completas
+> **✅ Buena práctica — Inyectá el reloj**
+> Cada vez que un cálculo dependa de "ahora" (edad, expiración, antigüedad de sesión), inyectá el `Date` como parámetro opcional. **Es la diferencia entre una suite reproducible y un test que se rompe el 29 de febrero.**
 
-Para la función `calcularEdad`, identificamos estas particiones:
+### 2.5.3 Catálogo de particiones para `calcularEdad`
 
-#### Particiones Válidas (Valid Equivalence Classes)
+#### 🟢 Particiones válidas
 
-- **EP1:** Fechas que resultan en edad 0-17 (menor de edad)
-  - Ejemplo: `"2010-05-15"`
-- **EP2:** Fechas que resultan en edad 18-64 (adulto)
-  - Ejemplo: `"1990-03-20"`
-- **EP3:** Fechas que resultan en edad 65+ (adulto mayor)
-  - Ejemplo: `"1950-12-01"`
+| ID | Descripción | Ejemplo de entrada |
+| ---- | ------------- | -------------------- |
+| EP1 | Menor de edad (0–17) | `"2010-05-15"` |
+| EP2 | Adulto (18–64) | `"1990-03-20"` |
+| EP3 | Adulto mayor (65+) | `"1950-12-01"` |
 
-#### Particiones Inválidas (Invalid Equivalence Classes)
+#### 🔴 Particiones inválidas
 
-- **EP4:** Fecha futura (persona no nacida aún)
-  - Ejemplo: `"2030-01-01"`
-- **EP5:** Fecha imposible (no existe en el calendario)
-  - Ejemplo: `"2023-02-30"`, `"2023-13-01"`
-- **EP6:** Formato inválido
-  - Ejemplo: `"abc"`, `"not-a-date"`
-- **EP7:** String vacío
-  - Ejemplo: `""`
-- **EP8:** Fecha muy antigua (puede causar overflow)
-  - Ejemplo: `"1500-01-01"`
+| ID | Descripción | Ejemplo de entrada |
+| ---- | ------------- | -------------------- |
+| EP4 | Fecha futura | `"2030-01-01"` |
+| EP5 | Fecha imposible (no existe en el calendario) | `"2023-02-30"`, `"2023-13-01"` |
+| EP6 | Formato inválido | `"abc"`, `"not-a-date"` |
+| EP7 | String vacío | `""` |
+| EP8 | Fecha extremadamente antigua | `"1500-01-01"` |
 
-#### Casos Especiales
+#### 🟡 Casos especiales (descubiertos al pensar dominios)
 
-- **EP9:** Persona que cumple años hoy
-- **EP10:** Persona que cumple años mañana
-- **EP11:** Nacido el 29 de febrero (año bisiesto)
+| ID | Descripción |
+| ---- | ------------- |
+| EP9  | Persona que cumple años **hoy** |
+| EP10 | Persona que cumple años **mañana** |
+| EP11 | Nacida un **29 de febrero** (año bisiesto) |
+
+**Figura 2.2** — Árbol de particiones identificadas.
 
 ```mermaid
 graph TD
-    A[Input_fechaNacimiento] --> B[Valida]
-    A --> C[Invalida]
+    A[Input: fechaNacimiento] --> B[Válida]
+    A --> C[Inválida]
     B --> D[EP1: 0-17 años]
     B --> E[EP2: 18-64 años]
     B --> F[EP3: 65+ años]
-    C --> G[EP4: Fecha_futura]
-    C --> H[EP5: Fecha_imposible]
-    C --> I[EP6: Formato_incorrecto]
-    C --> J[EP7: Null_o_vacio]
-    C --> K[EP8: Muy_antigua]
-    B --> L[EP9-11: Casos_especiales]
+    B --> L[EP9-11: casos especiales]
+    C --> G[EP4: fecha futura]
+    C --> H[EP5: fecha imposible]
+    C --> I[EP6: formato incorrecto]
+    C --> J[EP7: vacío]
+    C --> K[EP8: muy antigua]
 ```
 
-### Suite de Tests Completa
+### 2.5.4 Suite ejecutable
+
+**Listing 2.5** — Suite Jest organizada por familia de particiones.
 
 ```typescript
-describe('calcularEdad - Equivalence Partitioning', () => {
+describe('calcularEdad — Equivalence Partitioning', () => {
   const HOY = new Date('2025-11-03');
-  
-  describe('Particiones Válidas', () => {
-    test('EP1: Menor de edad (17 años)', () => {
-      const result = calcularEdad('2008-11-03', { today: HOY });
-      expect(result).toBe(17);
-    });
 
-    test('EP2: Adulto (30 años)', () => {
-      const result = calcularEdad('1995-06-15', { today: HOY });
-      expect(result).toBe(30);
+  describe('🟢 Particiones válidas', () => {
+    test('EP1: menor de edad (17 años)', () => {
+      expect(calcularEdad('2008-11-03', { today: HOY })).toBe(17);
     });
-
-    test('EP3: Adulto mayor (70 años)', () => {
-      const result = calcularEdad('1955-01-20', { today: HOY });
-      expect(result).toBe(70);
+    test('EP2: adulto (30 años)', () => {
+      expect(calcularEdad('1995-06-15', { today: HOY })).toBe(30);
+    });
+    test('EP3: adulto mayor (70 años)', () => {
+      expect(calcularEdad('1955-01-20', { today: HOY })).toBe(70);
     });
   });
 
-  describe('Particiones Inválidas', () => {
-    test('EP4: Fecha futura debe lanzar error', () => {
-      expect(() => {
-        calcularEdad('2030-01-01', { today: HOY });
-      }).toThrow('futura');
+  describe('🔴 Particiones inválidas', () => {
+    test('EP4: fecha futura → error', () => {
+      expect(() => calcularEdad('2030-01-01', { today: HOY })).toThrow('futura');
     });
-
-    test('EP5: Fecha imposible (30 de febrero)', () => {
-      expect(() => {
-        calcularEdad('2023-02-30', { today: HOY });
-      }).toThrow('inválida');
+    test('EP5: fecha imposible (30 de febrero)', () => {
+      expect(() => calcularEdad('2023-02-30', { today: HOY })).toThrow('inválida');
     });
-
-    test('EP6: Formato inválido', () => {
-      expect(() => {
-        calcularEdad('not-a-date', { today: HOY });
-      }).toThrow('inválida');
+    test('EP6: formato inválido', () => {
+      expect(() => calcularEdad('not-a-date', { today: HOY })).toThrow('inválida');
     });
-
-    test('EP7: String vacío', () => {
-      expect(() => {
-        calcularEdad('', { today: HOY });
-      }).toThrow('inválida');
+    test('EP7: string vacío', () => {
+      expect(() => calcularEdad('', { today: HOY })).toThrow('inválida');
     });
   });
 
-  describe('Casos Especiales', () => {
-    test('EP9: Cumple años hoy (debe incrementar edad)', () => {
-      const result = calcularEdad('2000-11-03', { today: HOY });
-      expect(result).toBe(25);
+  describe('🟡 Casos especiales', () => {
+    test('EP9: cumple años hoy → ya incrementó', () => {
+      expect(calcularEdad('2000-11-03', { today: HOY })).toBe(25);
     });
-
-    test('EP10: Cumple años mañana (aún no incrementa)', () => {
-      const result = calcularEdad('2000-11-04', { today: HOY });
-      expect(result).toBe(24);
+    test('EP10: cumple años mañana → aún no incrementa', () => {
+      expect(calcularEdad('2000-11-04', { today: HOY })).toBe(24);
     });
-
-    test('EP11: Nacido en año bisiesto (29 feb)', () => {
-      const result = calcularEdad('2000-02-29', { today: HOY });
-      expect(result).toBe(25);
+    test('EP11: nacida un 29 de febrero', () => {
+      expect(calcularEdad('2000-02-29', { today: HOY })).toBe(25);
     });
   });
 });
 ```
 
-### Weak vs Strong Equivalence Class Testing
+### 2.5.5 Weak vs Strong Equivalence Class Testing
 
-Existen dos enfoques para combinar particiones de múltiples parámetros:
+Cuando una función tiene **varios parámetros**, surge la pregunta: ¿pruebo cada parámetro por separado o todas las combinaciones?
 
-#### Weak Equivalence Class Testing
+| Enfoque | Hipótesis | Estrategia | Tests |
+| --------- | ----------- | ------------ | ------- |
+| **Weak ECT** | Errores aislados (Single Fault Assumption) | Una variable por vez | $\sum |\text{particiones}_i|$ |
+| **Strong ECT** | Errores combinados | Todas las combinaciones | $\prod |\text{particiones}_i|$ |
 
-- **Hipótesis:** Los errores ocurren aisladamente (Single Fault Assumption)
-- **Estrategia:** Probar una variable a la vez
-- **Tests necesarios:** Suma de particiones
-- **Ventaja:** Menos tests
-- **Desventaja:** No detecta interacciones entre parámetros
+**Ejemplo numérico** — Sistema con 3 parámetros de tamaños $\{3, 2, 3\}$:
 
-#### Strong Equivalence Class Testing
+$$
+\text{Weak ECT} = 3 + 2 + 3 = 8 \text{ tests}
+\qquad
+\text{Strong ECT} = 3 \times 2 \times 3 = 18 \text{ tests}
+$$
 
-- **Hipótesis:** Múltiples parámetros pueden fallar simultáneamente
-- **Estrategia:** Probar todas las combinaciones de particiones
-- **Tests necesarios:** Producto de particiones
-- **Ventaja:** Más exhaustivo
-- **Desventaja:** Explosión combinatoria
+> **Tip pro — Cuándo usar cada uno**
+> Usá **Weak ECT** para humo y componentes simples. Usá **Strong ECT** en componentes críticos (pago, autenticación, dosificación). Cuando el producto cartesiano explota, saltá a **Pairwise** (sección 2.9).
 
-**Ejemplo:** Sistema con 3 parámetros (3 particiones, 2 particiones, 3 particiones)
-
-- **Weak ECT:** 3 + 2 + 3 = 8 tests
-- **Strong ECT:** 3 × 2 × 3 = 18 tests
-
-> 💡 **Recomendación práctica:** Usa Weak ECT para testing de humo, Strong ECT para componentes críticos. Para evitar explosión combinatoria, considera Pairwise Testing (ver sección 2.9).
-
-> Nota
-> En el PDF de _Specification-based testing_ el autor hace esto exactamente igual: primero analiza cada parámetro por separado (null, vacío, un elemento, varios elementos, ceros a la izquierda) y recién después analiza la relación entre parámetros. Nosotros vamos a hacer lo mismo.
+> **Contexto histórico**
+> En el PDF de _Specification-based testing_ Aniche hace exactamente esto: primero analiza cada parámetro por separado (`null`, vacío, un elemento, varios elementos, ceros a la izquierda) y recién después analiza la **relación entre parámetros**. Es el orden que vamos a seguir nosotros.
 
 ---
 
-## 2.6 Paso 3: análisis de valores límite
+## 2.6 Paso 3 · Análisis de Valores Límite (BVA)
 
-Los límites son donde el software más se rompe.
+> **🔥 La regla de oro del BVA**
+> _"Bugs lurk in corners and congregate at boundaries."_
+> — **Boris Beizer**, _Software Testing Techniques_ (1990)
 
-### Fundamento Empírico del Boundary Value Analysis
+Los límites son donde el software más se rompe. Esa intuición tiene respaldo empírico:
 
-Según **Paul Jorgensen** (2013) en "Software Testing: A Craftsman's Approach":
+### 2.6.1 Fundamento empírico
 
-> "Los errores tienden a ocurrir en los límites del dominio de entrada más que en el centro. Aproximadamente el 16% de todos los bugs reportados están relacionados con condiciones de borde."
+> _"Los errores tienden a ocurrir en los límites del dominio de entrada más que en el centro. Aproximadamente el 16% de todos los bugs reportados están relacionados con condiciones de borde."_
+> — **Paul Jorgensen**, _Software Testing: A Craftsman's Approach_ (4.ª ed., 2013)
 
-**Estudio de Kaner et al.** (1999):
+**Tabla 2.2** — Eficacia comparada del BVA según Kaner, Falk & Nguyen (1999):
 
-- BVA detecta **35-40% más defectos** que testing aleatorio con mismo número de casos
-- BVA es **3-5x más eficiente** en costo-beneficio que testing exhaustivo
-- **70-80% de los defectos** detectados con BVA son críticos (alta severidad)
+| Métrica | Resultado |
+| --------- | ----------- |
+| Defectos detectados vs. testing aleatorio | **+35–40 %** |
+| Eficiencia costo-beneficio vs. testing exhaustivo | **3–5×** |
+| Severidad de defectos detectados | **70–80 % son críticos** |
 
-### Qué es un límite
+### 2.6.2 Qué cuenta como "límite"
 
-Un límite es:
+> **Definición — Límite**
+> Cualquier valor donde el comportamiento del sistema **cambia de regla**: el mínimo permitido, el máximo permitido, el paso entre dos rangos, o la transición entre dos políticas de negocio.
 
-- el mínimo permitido,
-- el máximo permitido,
-- el paso entre valores,
-- la transición entre dos reglas.
+### 2.6.3 Variantes de BVA
 
-### Variantes de Boundary Value Analysis
+#### 1️⃣ Normal BVA (Basic BVA)
 
-#### 1. Normal BVA (Basic BVA)
+**Enfoque:** Prueba valores justo en y alrededor de los límites. Para un rango `[min, max]` usás 7 puntos:
 
-**Enfoque:** Prueba valores en y alrededor de los límites
+$$
+\{ \text{min} - 1,\ \text{min},\ \text{min} + 1,\ \text{nominal},\ \text{max} - 1,\ \text{max},\ \text{max} + 1 \}
+$$
 
-Para un rango `[min, max]` se prueban:
+**Ejemplo: edades aceptadas en `[18, 65]`** → puntos clave: `17, 18, 19, 40, 64, 65, 66`.
 
-- min - 1 (justo debajo del límite inferior)
-- min (límite inferior exacto)
-- min + 1 (justo sobre el límite inferior)
-- nominal (valor medio del rango)
-- max - 1 (justo bajo el límite superior)
-- max (límite superior exacto)
-- max + 1 (justo sobre el límite superior)
-
-**Ejemplo: si un sistema acepta edades de 18 a 65:**
-
-- 17 (debajo del mínimo)
-- 18 (mínimo)
-- 19 (justo encima del mínimo)
-- 40 (nominal)
-- 64 (justo debajo del máximo)
-- 65 (máximo)
-- 66 (arriba del máximo)
+**Figura 2.3** — Línea de valores límite.
 
 ```mermaid
 graph LR
-    A[17] --> B[18]
-    B --> C[19]
-    C --> D[40_nominal]
-    D --> E[64]
-    E --> F[65]
-    F --> G[66]
+    A[17 ❌] --> B[18 ✅]
+    B --> C[19 ✅]
+    C --> D[40 nominal ✅]
+    D --> E[64 ✅]
+    E --> F[65 ✅]
+    F --> G[66 ❌]
 ```
+
+**Listing 2.6** — Suite Normal BVA para validación de edad.
 
 ```typescript
 describe('Normal BVA - Validación de edad [18-65]', () => {
@@ -509,9 +524,11 @@ describe('Normal BVA - Validación de edad [18-65]', () => {
 });
 ```
 
-#### 2. Robust BVA
+#### 2️⃣ Robust BVA
 
-**Enfoque:** Añade valores extremos fuera del rango razonable
+**Enfoque:** Añade valores extremos **fuera** del rango razonable: negativos, ceros, números absurdamente grandes. Sirve para los puntos donde el usuario o un sistema externo podrían enviar basura.
+
+**Listing 2.7** — Robust BVA: probando lo impensable.
 
 ```typescript
 describe('Robust BVA - Valores extremos', () => {
@@ -529,13 +546,13 @@ describe('Robust BVA - Valores extremos', () => {
 });
 ```
 
-#### 3. Worst-Case BVA
+#### 3️⃣ Worst-Case BVA
 
-**Enfoque:** Combina límites de MÚLTIPLES variables
+**Enfoque:** Combina límites de **múltiples variables a la vez**. Para cada variable, usás 5 valores: $\{ \text{min},\ \text{min}+1,\ \text{nominal},\ \text{max}-1,\ \text{max} \}$ y hacés el producto cartesiano.
 
-Para cada variable, usa 5 valores: {min, min+1, nominal, max-1, max}
+**Ejemplo:** rectángulo con `ancho ∈ [1, 100]` y `alto ∈ [1, 100]` ⇒ $5^2 = 25$ casos.
 
-**Ejemplo: Rectángulo con ancho [1-100] y alto [1-100]**
+**Listing 2.8** — Worst-Case BVA aplicado a área de rectángulo.
 
 ```typescript
 describe('Worst-Case BVA - Área de rectángulo', () => {
@@ -553,48 +570,60 @@ describe('Worst-Case BVA - Área de rectángulo', () => {
 });
 ```
 
-### Comparación de Estrategias BVA
+### 2.6.4 Tabla comparativa de estrategias BVA
 
-| Estrategia              | Variables | Valores/var | Tests      | Ejemplo (n=2) | Detecta               |
-|-------------------------|-----------|-------------|------------|---------------|----------------------|
-| Normal BVA              | n         | 5           | 4n + 1     | 9             | Errores simples      |
-| Robust BVA              | n         | 7           | 6n + 1     | 13            | Errores + robustez   |
-| Worst-Case BVA          | n         | 5           | 5ⁿ         | 25            | Interacciones        |
-| Robust Worst-Case BVA   | n         | 7           | 7ⁿ         | 49            | Todo lo anterior     |
+**Tabla 2.3** — Costo y cobertura de cada variante (n = número de variables).
 
-### Cuándo usar cada variante
+| Estrategia              | Valores/var | Tests        | Ejemplo (n=2) | Detecta               |
+| ------------------------- | ------------- | -------------- | --------------- | ----------------------- |
+| Normal BVA              | 5           | $4n + 1$     | 9             | Errores simples       |
+| Robust BVA              | 7           | $6n + 1$     | 13            | Errores + robustez    |
+| Worst-Case BVA          | 5           | $5^n$        | 25            | Interacciones         |
+| Robust Worst-Case BVA   | 7           | $7^n$        | 49            | Todo lo anterior      |
+
+### 2.6.5 ¿Cuándo usar cada variante?
+
+**Tabla 2.4** — Guía de decisión rápida.
 
 | Situación | Variante recomendada | Razón |
-|-----------|---------------------|-------|
-| Testing rápido, componente simple | Normal BVA | Balance costo-beneficio |
-| Sistema crítico (médico, financiero) | Robust Worst-Case BVA | Máxima cobertura |
-| Múltiples variables independientes | Normal BVA por variable | Evita explosión combinatoria |
-| Variables con interacciones conocidas | Worst-Case BVA | Detecta bugs de interacción |
-| Validación de entrada de usuario | Robust BVA | Usuarios pueden ingresar cualquier cosa |
+| ----------- | --------------------- | ------- |
+| Componente simple, testing rápido | Normal BVA | Mejor balance costo-beneficio |
+| Sistema crítico (médico, financiero, defensa) | Robust Worst-Case BVA | Máxima cobertura |
+| Variables independientes (3–4) | Normal BVA por variable | Evita explosión combinatoria |
+| Interacciones conocidas entre variables | Worst-Case BVA | Detecta bugs de interacción |
+| Validación de input de usuario | Robust BVA | Los usuarios envían cualquier cosa |
+| 5+ variables | **Pairwise** (§2.9) | Solo opción razonable |
 
-> 💡 **Regla práctica:** Para 1-2 variables usa Worst-Case BVA (25-49 tests). Para 3-4 variables usa Normal BVA + casos seleccionados. Para 5+ variables considera Pairwise Testing (sección 2.9).
+> **Tip pro — Regla mnemotécnica**
+> $1$–$2$ variables → Worst-Case BVA. $3$–$4$ variables → Normal BVA + casos clave. $5$+ variables → Pairwise sin dudar.
 
-> Observación
-> Esto parece básico, pero es lo que más falta cuando reviso test suites reales de equipos que automatizaron "a lo bestia": tienen el caso feliz, pero no tienen el 17 ni el 66. Y después dicen "Playwright no encontró nada". Claro, si no le diste escenarios que rompan reglas, no va a encontrar nada.
+> **Observación de campo**
+> Esto parece básico, pero es **lo que más falta** cuando reviso test suites reales de equipos que automatizaron "a lo bestia": tienen el caso feliz, pero no tienen el 17 ni el 66. Y después dicen "Playwright no encontró nada". Claro: si no le diste escenarios que **rompan reglas**, no va a encontrar nada.
+
+> **Resumen rápido — BVA**
+> Los bugs viven en los bordes. Combiná **Normal BVA** (cobertura mínima decente) con **Robust BVA** (defensa contra inputs absurdos) y reservá **Worst-Case** para cuando hay interacción real entre variables.
 
 ---
 
-## 2.7 Tablas de Decisión (Decision Tables)
+## 2.7 Paso 4 · Tablas de decisión
 
-Las **tablas de decisión** son una técnica de testing de caja negra que modela lógica de negocio compleja con múltiples condiciones y acciones.
+> **Definición — Tabla de decisión**
+> Técnica de testing de **caja negra** que modela lógica de negocio compleja como una matriz de **condiciones × acciones**, donde cada columna es una **regla** de negocio.
 
 Según **Myers et al.** (2011):
 
-> "Las tablas de decisión son efectivas cuando el comportamiento del sistema depende de combinaciones de condiciones de entrada, especialmente cuando hay reglas de negocio complejas."
+> _"Las tablas de decisión son efectivas cuando el comportamiento del sistema depende de combinaciones de condiciones de entrada, especialmente cuando hay reglas de negocio complejas."_
 
-### Cuándo usar Tablas de Decisión
+### 2.7.1 ¿Cuándo usarlas?
 
-- Múltiples condiciones booleanas que determinan diferentes acciones
-- Reglas de negocio con combinaciones específicas
-- Políticas con múltiples criterios de aprobación/rechazo
-- Cálculos que dependen de varias flags o estados
+Usá una tabla de decisión cuando reconocés **alguno** de estos patrones:
 
-### Estructura de una Tabla de Decisión
+- Múltiples condiciones booleanas que disparan distintas acciones.
+- Reglas de negocio con combinaciones específicas (descuentos, autorizaciones, políticas).
+- Cálculos que dependen de varias _flags_ o estados simultáneos.
+- Múltiples criterios de aprobación / rechazo (crédito, KYC, fraude).
+
+### 2.7.2 Estructura visual
 
 ```
 ┌─────────────────┬────────────────────────────────┐
@@ -614,12 +643,11 @@ Según **Myers et al.** (2011):
 └─────────────────┴────┴────┴────┴────┴────┴────┴──┘
 ```
 
-**Leyenda:**
+**Leyenda:** `T` = True · `F` = False · `-` = _Don't Care_ (no importa) · `X` = acción a ejecutar.
 
-- T = True, F = False, - = Don't Care (no importa el valor)
-- X = Acción a ejecutar
+### 2.7.3 Caso real: aprobación de préstamos
 
-### Ejemplo Real: Sistema de Aprobación de Préstamos
+**Listing 2.9** — Implementación y suite de tests basada en tabla de decisión.
 
 ```typescript
 interface LoanRequest {
@@ -699,45 +727,50 @@ describe('LoanApprovalSystem - Decision Table Testing', () => {
 });
 ```
 
-### Ventajas de las Tablas de Decisión
+### 2.7.4 Ventajas formales
 
-1. **Completitud:** Aseguran que todas las combinaciones están consideradas
-2. **Detección de inconsistencias:** Reglas contradictorias se hacen evidentes
-3. **Documentación:** Sirven como especificación ejecutable de reglas de negocio
-4. **Reducción de redundancia:** Optimización con "Don't Care" (-)
+| Ventaja | Por qué importa |
+| --------- | ---------------- |
+| **Completitud** | Te obliga a considerar todas las combinaciones |
+| **Detección de inconsistencias** | Reglas contradictorias se hacen visibles |
+| **Documentación viva** | Sirve como especificación ejecutable de la lógica de negocio |
+| **Reducción con _Don't Care_** | Optimiza tests sin perder cobertura semántica |
 
-### Limited-Entry vs Extended-Entry
+### 2.7.5 Limited-Entry vs Extended-Entry
 
-**Limited-Entry:** Condiciones binarias (True/False)
-
-**Extended-Entry:** Condiciones con rangos de valores
+- **Limited-Entry:** condiciones binarias (T/F).
+- **Extended-Entry:** condiciones con rangos o categorías.
 
 ```
 Extended-Entry Decision Table:
 
 Condición: Edad     │ <18 │ 18-25 │ 26-65 │ >65 │
-Condición: Ingreso  │ -   │ <30K  │ >30K  │ -   │
+Condición: Ingreso  │  -  │ <30K  │ >30K  │  -  │
 ────────────────────┼─────┼───────┼───────┼─────┤
 Acción: Tarjeta Oro │     │   X   │   X   │     │
 ```
 
-> 💡 **Observación:** Las tablas de decisión son especialmente útiles cuando tienes 3-6 condiciones booleanas. Con más de 8 condiciones, considera dividir la lógica en sub-sistemas.
+> **Tip pro — Cuándo se vuelven inmanejables**
+> Las tablas de decisión brillan con **3–6 condiciones**. Con más de 8 conviene **dividir la lógica en sub-sistemas** y armar una tabla por cada uno. Si fuerzas una sola tabla con 10 condiciones, vas a tener $2^{10} = 1024$ reglas.
 
 ---
 
-## 2.8 State Transition Testing (Testing de Transición de Estados)
+## 2.8 Paso 5 · State Transition Testing
 
-Esta técnica modela el sistema como una **máquina de estados finitos (FSM)** y diseña tests que cubren transiciones entre estados.
+> **Definición — State Transition Testing**
+> Técnica que modela el sistema como una **máquina de estados finitos (FSM)** y diseña casos que cubren transiciones, eventos, guardas y acciones.
 
-### Cuándo usar State Transition Testing
+### 2.8.1 ¿Cuándo aplicarla?
 
-- Sistemas con ciclo de vida de objetos (pedidos, tickets, usuarios)
-- Protocolos de comunicación
-- Workflows de negocio
-- Interfaces de usuario con estados distintos
-- Sesiones de usuario (login/logout)
+Es la técnica natural cuando el SUT tiene un **ciclo de vida** observable:
 
-### Elementos de un Diagrama de Estados
+- Pedidos, tickets, suscripciones, usuarios.
+- Protocolos de comunicación (HTTP, TCP handshake, OAuth).
+- Workflows de negocio con aprobaciones.
+- Sesiones (login → activo → idle → expirado → logout).
+- Reproductores, máquinas expendedoras, ATMs.
+
+### 2.8.2 Anatomía de un diagrama de estados
 
 ```mermaid
 stateDiagram-v2
@@ -752,15 +785,19 @@ stateDiagram-v2
     Cancelado --> [*]
 ```
 
-**Componentes:**
+**Componentes formales:**
 
-- **Estados**: Condiciones del sistema (Borrador, Enviado, Aprobado, etc.)
-- **Transiciones**: Cambios entre estados
-- **Eventos**: Disparadores de transiciones (submit, approve, reject)
-- **Guardas**: Condiciones para permitir transición
-- **Acciones**: Efectos de la transición
+| Componente | Qué representa | Ejemplo |
+| ------------ | ---------------- | --------- |
+| **Estado** | Condición del sistema | `Borrador`, `Aprobado` |
+| **Transición** | Cambio entre estados | `Borrador → Enviado` |
+| **Evento** | Disparador de la transición | `submit()` |
+| **Guarda** | Condición booleana que habilita la transición | `total > 0` |
+| **Acción** | Efecto colateral de la transición | `notificarAprobador()` |
 
-### Ejemplo Completo: Sistema de Órdenes de Compra
+### 2.8.3 Caso completo: órdenes de compra
+
+**Listing 2.10** — Implementación de la máquina de estados.
 
 ```typescript
 type OrderState = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
@@ -930,77 +967,72 @@ describe('OrderStateMachine - State Transition Testing', () => {
 });
 ```
 
-### Niveles de Cobertura de Estados
+### 2.8.4 Niveles de cobertura
 
-**1. 0-switch coverage (State Coverage):**
+**Tabla 2.5** — Niveles clásicos de cobertura para FSM.
 
-- Visitar cada estado al menos una vez
-- Mínimo: n tests (donde n = número de estados)
+| Nivel | Qué cubre | Tests mínimos | Cuándo |
+| ------- | ----------- | --------------- | -------- |
+| **0-switch (State Coverage)** | Cada estado al menos una vez | $n$ estados | Smoke testing |
+| **1-switch (Transition Coverage)** | Cada transición válida (y recomendado: las inválidas) | $t$ transiciones | Default profesional |
+| **N-switch** | Secuencias de N transiciones consecutivas | Crece exponencialmente | Sistemas críticos |
 
-**2. 1-switch coverage (Transition Coverage):**
+**Para nuestro ejemplo de `Order`:**
 
-- Ejecutar cada transición válida al menos una vez
-- **Recomendado:** También probar transiciones inválidas
-- Mínimo: t tests (donde t = número de transiciones)
+- 5 estados · 6 transiciones válidas · ~15–20 transiciones inválidas que vale la pena probar.
 
-**3. N-switch coverage:**
+### 2.8.5 Tabla de transiciones (matriz de estados)
 
-- Secuencias de N transiciones consecutivas
-- Más exhaustivo pero crece exponencialmente
+**Tabla 2.6** — Matriz estado × evento del sistema de órdenes.
 
-**Para el ejemplo de Order:**
-
-- Estados: 5 (DRAFT, SUBMITTED, APPROVED, REJECTED, CANCELLED)
-- Transiciones válidas: 6
-- Transiciones inválidas a probar: ~15-20
-
-### Tabla de Transiciones
-
-| Estado Actual | Evento           | Estado Siguiente | ¿Válido? |
-|---------------|------------------|------------------|----------|
+| Estado actual | Evento           | Estado siguiente | ¿Válido?  |
+| --------------- | ------------------ | ------------------ | ----------- |
 | DRAFT         | submit()         | SUBMITTED        | ✅        |
-| DRAFT         | approve()        | -                | ❌ Error  |
-| DRAFT         | reject()         | -                | ❌ Error  |
+| DRAFT         | approve()        | —                | ❌ Error  |
+| DRAFT         | reject()         | —                | ❌ Error  |
 | DRAFT         | cancel()         | CANCELLED        | ✅        |
-| SUBMITTED     | submit()         | -                | ❌ Error  |
+| SUBMITTED     | submit()         | —                | ❌ Error  |
 | SUBMITTED     | approve()        | APPROVED         | ✅        |
 | SUBMITTED     | reject()         | REJECTED         | ✅        |
 | SUBMITTED     | requestChanges() | DRAFT            | ✅        |
 | SUBMITTED     | cancel()         | CANCELLED        | ✅        |
-| APPROVED      | cancel()         | -                | ❌ Error  |
+| APPROVED      | cancel()         | —                | ❌ Error  |
 
-> 💡 **Observación:** En sistemas reales, siempre prueba las transiciones inválidas. Son las que más bugs encuentran porque nadie las considera en el desarrollo inicial.
+> **Observación de campo — Los caminos negros**
+> En sistemas reales, **siempre** probá las transiciones inválidas. Son las que más bugs encuentran porque nadie las considera en el desarrollo inicial. Si la matriz tiene 30 celdas, probá las 30 —no solo las 6 verdes—.
 
 ---
 
-## 2.9 Combinatorial Testing: Pairwise (All-Pairs)
+## 2.9 Paso 6 · Combinatorial Testing: Pairwise (All-Pairs)
 
-Ya vimos en el Capítulo 1 que un formulario con 10 campos y 5 valores cada uno tiene $5^{10} = 9,765,625$ combinaciones posibles. Eso es **imposible de probar exhaustivamente**.
+Ya vimos en el Capítulo 1 que un formulario con 10 campos y 5 valores cada uno tiene $5^{10} = 9{,}765{,}625$ combinaciones posibles. Eso es **físicamente imposible** de probar exhaustivamente.
 
-**Pairwise Testing** (también llamado **All-Pairs** u **Orthogonal Array Testing**) reduce drásticamente el número de tests mientras mantiene alta efectividad.
+**Pairwise Testing** —también llamado **All-Pairs** u **Orthogonal Array Testing**— reduce drásticamente el número de tests **manteniendo alta efectividad** de detección.
 
-### Fundamento Teórico
+### 2.9.1 El insight empírico (NIST)
 
-Según estudios de **Kuhn, Wallace & Gallo** (2004) del NIST:
+> _"El 70% de los defectos son causados por interacciones de 1 o 2 parámetros. El 90% por interacciones de hasta 3 parámetros."_
+> — **Kuhn, Wallace & Gallo**, NIST (2004)
 
-> "El 70% de los defectos son causados por interacciones de 1 o 2 parámetros. El 90% por interacciones de hasta 3 parámetros."
+> **💡 Idea clave**
+> No necesitás probar **todas** las combinaciones: alcanza con asegurar que **cada par de valores** aparezca junto al menos una vez. Esa simple regla cubre la mayoría de los bugs reales.
 
-**Implicación:** No necesitamos probar TODAS las combinaciones, solo asegurar que cada par de valores aparezca junto al menos una vez.
+### 2.9.2 Caso: configuración de navegador
 
-### Ejemplo: Configuración de Navegador
+**Parámetros (3ⁿ con n=4 ⇒ 81 combinaciones exhaustivas):**
 
-**Parámetros:**
+| Parámetro | Valores |
+| ----------- | --------- |
+| Browser | Chrome, Firefox, Safari |
+| OS | Windows, Mac, Linux |
+| Language | ES, EN, FR |
+| Resolution | 1080p, 1440p, 4K |
 
-- Browser: Chrome, Firefox, Safari (3 valores)
-- OS: Windows, Mac, Linux (3 valores)
-- Language: ES, EN, FR (3 valores)
-- Resolution: 1080p, 1440p, 4K (3 valores)
+$$
+\text{Exhaustivo} = 3^4 = 81 \quad\Longrightarrow\quad \text{Pairwise} \approx 9 \quad (\text{reducción del } \mathbf{\sim 89\%})
+$$
 
-**Testing exhaustivo:** $3^4 = 81$ combinaciones
-
-**Pairwise testing:** ~9-12 combinaciones (reducción del **85%**)
-
-### Ejemplo Práctico con TypeScript
+**Listing 2.11** — Suite Pairwise (set generado con PICT).
 
 ```typescript
 interface TestConfig {
@@ -1038,17 +1070,19 @@ describe('Pairwise Testing - Browser Compatibility', () => {
 });
 ```
 
-### Comparación: Exhaustivo vs Pairwise vs Aleatorio
+### 2.9.3 Comparación: exhaustivo vs pairwise vs aleatorio
 
-| Estrategia | Casos de prueba | Detección de defectos | Tiempo de ejecución |
-|------------|-----------------|----------------------|---------------------|
-| Exhaustivo | 81              | 100%                | 100%                |
-| Pairwise   | 9               | ~90%                | 11%                 |
-| Aleatorio  | 9               | ~50-60%             | 11%                 |
+**Tabla 2.7** — Trade-off entre cobertura y costo.
 
-### Herramientas para Generar Pairwise
+| Estrategia  | Casos | Detección de defectos | Costo de ejecución |
+| ------------- | ------- | ---------------------- | -------------------- |
+| Exhaustivo  | 81    | 100 %                | 100 %              |
+| **Pairwise** | **9** | **~90 %**           | **~11 %**          |
+| Aleatorio   | 9     | ~50–60 %             | ~11 %              |
 
-**1. PICT (Microsoft) - Recomendado**
+### 2.9.4 Herramientas para generar casos pairwise
+
+#### PICT (Microsoft) — recomendado
 
 ```bash
 # Archivo config.txt
@@ -1061,7 +1095,7 @@ Resolution: 1080p, 1440p, 4K
 pict config.txt > test-cases.txt
 ```
 
-**2. AllPairs (Python)**
+#### 🐍 AllPairs (Python)
 
 ```python
 from allpairspy import AllPairs
@@ -1077,216 +1111,175 @@ for i, combo in enumerate(AllPairs(parameters)):
     print(f"Test {i+1}: {combo}")
 ```
 
-**3. jenny (CLI tool)**
+#### jenny (CLI tool)
 
 ```bash
 jenny browser=3 os=3 language=3 resolution=3
 ```
 
-### Pairwise con Restricciones
+> **Tip pro — Valores prohibidos**
+> En PICT podés declarar **constraints** (`IF [Browser] = "Safari" THEN [OS] = "Mac";`) para evitar combinaciones imposibles. Así no malgastás casos en escenarios que no existen en producción.
 
-A veces ciertas combinaciones no son válidas:
+> **Resumen rápido — Pairwise**
+> Cuando $n \geq 5$ parámetros, pairwise no es una optimización: es **la única opción racional**. Combinálo con BVA dentro de cada parámetro para obtener cobertura de bordes + cobertura de interacciones.
 
-```typescript
-// Safari no está disponible en Linux
-// Linux no soporta 4K en este ejemplo
-```
+### 2.9.5 Pairwise con restricciones
 
-PICT soporta restricciones:
+A veces ciertas combinaciones son **imposibles** o **no soportadas** y no tiene sentido generarlas:
 
-```
+```text
+# Restricciones declaradas en PICT
 IF [Browser] = "Safari" THEN [OS] <> "Linux";
 IF [OS] = "Linux" THEN [Resolution] <> "4K";
 ```
 
-### N-way Combinatorial Testing
+### 2.9.6 N-way Combinatorial Testing
 
-- **1-way**: Cada valor aparece al menos una vez (trivial)
-- **2-way (Pairwise)**: Cada par de valores aparece junto
-- **3-way**: Cada trío de valores aparece junto (más exhaustivo)
-- **N-way**: Cada combinación de N valores aparece
+Pairwise es el caso $N=2$. Podés subir el grado para más cobertura, pagando más casos:
 
-**Crecimiento:**
+**Tabla 2.8** — Cobertura empírica según grado de combinación (Kuhn et al., 2004, NIST).
 
-Para 4 parámetros con 3 valores cada uno:
+| Grado | Garantía | Defectos detectados |
+| --- | --- | --- |
+| 1-way | Cada valor aparece al menos una vez | Trivial |
+| **2-way (Pairwise)** | Cada **par** de valores aparece junto | **~70 %** |
+| 3-way | Cada **trío** de valores aparece junto | ~90 % |
+| 4-way | Cada **cuarteto** de valores aparece junto | ~95 % |
+| 5-way | Idem, 5 | ~97 % |
+| 6-way | Idem, 6 | ~99 % |
 
-- 1-way: 4 tests
-- 2-way: ~9 tests
-- 3-way: ~27 tests
-- 4-way (exhaustivo): 81 tests
+> **Recomendación práctica**
+> Sistemas críticos (médico, aeroespacial, financiero core) → 3-way o 4-way. Resto del mundo → 2-way. Testing exploratorio → 1-way + casos aleatorios dirigidos.
 
-### Datos Empíricos de Efectividad
-
-**NIST (Kuhn et al., 2004):**
-
-- 2-way cubre ~**70% de defectos**
-- 3-way cubre ~**90% de defectos**
-- 4-way cubre ~**95% de defectos**
-- 5-way cubre ~**97% de defectos**
-- 6-way cubre ~**99% de defectos**
-
-**Recomendación:**
-
-- Sistemas críticos: 3-way o 4-way
-- Sistemas normales: 2-way (pairwise)
-- Testing exploratorio: 1-way + aleatorio
-
-> 💡 **Observación:** Pairwise es la técnica que más ahorra tiempo sin sacrificar calidad. Si tienes un formulario con 8 campos, Pairwise puede reducir de miles de casos a solo 15-20.
+> **Insight de campo**
+> Si tenés un formulario con 8 campos y 3 valores cada uno, el espacio exhaustivo es $3^8 = 6{,}561$ combinaciones. Pairwise lo reduce a **~15–20 casos** y vas a encontrar los mismos 7 de cada 10 bugs. Ese 30 % restante se persigue con BVA + exploratorio + observabilidad en producción.
 
 ---
 
-## 2.10 Paso 4: analizar relaciones entre parámetros
+## 2.10 Paso 7 · Analizar relaciones entre parámetros
 
-Hasta acá probaste cada parámetro por separado.
-Ahora hay que ver **cómo se combinan**.
+Hasta acá probaste cada parámetro **por separado**. Ahora el paso final del pipeline: ver **cómo se combinan** entre sí.
 
-En sistemas de negocio esto pasa todo el tiempo. Ejemplos que vi trabajando para equipos de UK y Alemania:
+En sistemas de negocio esto pasa todo el tiempo. Ejemplos que vi trabajando con equipos en UK y Alemania:
 
-- país + moneda
-- tipo de documento + país
-- tipo de envío + peso
-- rol del usuario + estado del pedido
+| Combinación | Por qué importa |
+| --- | --- |
+| País + moneda | Ciertos países restringen ciertas monedas. |
+| Tipo de documento + país | Un DNI argentino no es válido en España. |
+| Tipo de envío + peso | Express puede tener tope de kilos. |
+| Rol del usuario + estado del pedido | Un invitado no aprueba pedidos pendientes. |
+
+**Figura 2.4** — Análisis de combinaciones entre parámetros.
 
 ```mermaid
 graph TD
-    A[Parametros A y B] --> B[Combinaciones posibles]
-    B --> C[Combinaciones validas]
-    B --> D[Combinaciones invalidas]
-    C --> E[Casos de prueba]
-    D --> F[Errores esperados]
+    A[Parámetros A y B] --> B[Combinaciones posibles]
+    B --> C[✅ Combinaciones válidas]
+    B --> D[❌ Combinaciones inválidas]
+    C --> E[Casos de prueba felices]
+    D --> F[Casos de prueba con error esperado]
 ```
 
-Ejemplo en tabla:
+**Tabla 2.9** — Ejemplo: matriz rol × estado para "puede aprobar".
 
-| Rol      | Estado del pedido | Debe poder aprobar |
-| -------- | ----------------- | ------------------ |
-| admin    | pendiente         | si                 |
-| admin    | aprobado          | no                 |
-| operador | pendiente         | si                 |
-| operador | aprobado          | no                 |
-| invitado | pendiente         | no                 |
+| Rol      | Estado del pedido | ¿Puede aprobar? |
+| -------- | ----------------- | ---------------- |
+| admin    | pendiente         | ✅               |
+| admin    | aprobado          | ❌               |
+| operador | pendiente         | ✅               |
+| operador | aprobado          | ❌               |
+| invitado | pendiente         | ❌               |
 
-> Nota
-> Acá es donde una QA que solo ejecuta se queda sin herramientas. La que diseña, en cambio, puede discutir la regla con producto y decir “tu lógica tiene huecos”.
+> **💡 Idea clave**
+> Acá es donde una QA que **solo ejecuta** se queda sin herramientas. La que **diseña** puede ir a producto y decir: _"tu lógica tiene huecos en la celda invitado × aprobado"_.
 
 ---
 
-## 2.8 Paso 5: derivar los casos de prueba
+## 2.11 Matriz de selección de técnicas
 
-Una vez que tengo:
+Una de las preguntas más frecuentes en mentorías es: **¿cuándo uso cada técnica?**
 
-- particiones,
-- límites,
-- combinaciones relevantes,
-
-recién ahí escribo los casos.
-
-Estructura que recomiendo:
-
-```text
-ID: CT-REGISTRO-001
-Titulo: Registrar usuario con datos validos
-Proposito: Validar que el sistema acepta datos minimos y crea el usuario
-Precondiciones:
-  - No existe un usuario con ese correo
-Pasos:
-  1. Abrir pantalla de registro
-  2. Completar nombre, correo y password valido
-  3. Enviar formulario
-Resultado esperado:
-  - El sistema crea el usuario
-  - Se muestra mensaje de exito
-Riesgo cubierto: flujo feliz
-Automatizable: si
-```
-
-> Aclaracion
-> El libro de _Effective Software Testing_ insiste en separar **diseño** de **ejecución** y de **automatización**. El test nace aquí, en el diseño. La automatización es solo la forma de ejecutarlo muchas veces. Si saltás directo a Playwright sin este paso, tu suite va a crecer desordenada.
-
----
-
-## 2.11 Matriz de Selección de Técnicas de Testing
-
-Una de las preguntas más frecuentes es: **¿cuándo uso cada técnica?**
-
-Esta tabla te ayuda a decidir:
+**Tabla 2.10** — Guía de decisión por escenario.
 
 | Situación | Técnica recomendada | Razón |
-|-----------|---------------------|-------|
-| Función con 1-2 parámetros simples | Particiones de Equivalencia + Normal BVA | Rápido y suficiente |
-| Validación de entrada de usuario | Robust BVA + Particiones Inválidas | Usuarios ingresan cualquier cosa |
-| Lógica de negocio con múltiples condiciones | Tablas de Decisión | Visualiza todas las reglas claramente |
-| Workflow con estados (pedidos, tickets) | State Transition Testing | Cubre ciclo de vida completo |
-| Formulario con 5+ campos | Pairwise Testing | Reduce explosión combinatoria |
-| Sistema crítico (médico, financiero) | Robust Worst-Case BVA + Strong ECT | Máxima cobertura |
-| API con múltiples parámetros opcionales | Pairwise + Particiones | Balance entre cobertura y cantidad |
-| Testing de regresión rápido | Weak ECT + Normal BVA | Costo-beneficio óptimo |
-| Sistema legacy sin documentación | Exploratorio + Particiones observadas | Descubrir comportamiento real |
+| --- | --- | --- |
+| Función con 1–2 parámetros simples | EP + Normal BVA | Rápido y suficiente |
+| Validación de input de usuario | Robust BVA + EP inválidas | El usuario manda cualquier cosa |
+| Lógica de negocio con múltiples condiciones | Tablas de decisión | Visualiza todas las reglas claramente |
+| Workflow con estados (pedidos, tickets) | State Transition Testing | Cubre el ciclo de vida completo |
+| Formulario con 5+ campos | Pairwise | Reduce explosión combinatoria |
+| Sistema crítico (médico, financiero core) | Robust Worst-Case BVA + Strong ECT | Máxima cobertura |
+| API con muchos parámetros opcionales | Pairwise + EP | Balance cobertura/cantidad |
+| Regresión rápida en CI | Weak ECT + Normal BVA | Costo-beneficio óptimo |
+| Sistema legacy sin documentación | Exploratorio + EP observadas | Descubrir comportamiento real |
 
-### Combinando Técnicas
+### 2.11.1 Combinando técnicas: caso real
 
-En la práctica, casi nunca usas UNA sola técnica. Lo común es combinarlas:
-
-**Ejemplo: API de Registro de Usuario**
+> **Caso de estudio — API de registro de usuario**
 
 ```typescript
 interface RegistrationRequest {
-  email: string;      // Particiones: válido, formato inválido, vacío
-  password: string;   // BVA: longitud [8-128], caracteres especiales
-  age: number;        // BVA: [18-150], Particiones: menor, mayor válido
-  country: string;    // Particiones: países soportados vs no soportados
-  newsletter: boolean; // Booleano simple
+  email: string;       // EP: válido / formato inválido / vacío
+  password: string;    // BVA: longitud [8, 128] + caracteres especiales
+  age: number;         // BVA: [18, 150] + EP: menor / mayor válido
+  country: string;     // EP: soportados / no soportados
+  newsletter: boolean; // booleano
 }
 ```
 
-**Estrategia combinada:**
+**Estrategia compuesta:**
 
-1. **Particiones de Equivalencia** para email, country
-2. **Robust BVA** para password (longitud), age (límites)
-3. **Pairwise** para combinar email válido/inválido × country soportado/no soportado × newsletter true/false
-4. **Casos especiales:** Caracteres Unicode en email, países con restricciones legales
+1. **Particiones de equivalencia** para `email` y `country`.
+2. **Robust BVA** para `password` (longitud) y `age` (límites).
+3. **Pairwise** combinando `email × country × newsletter`.
+4. **Casos especiales:** Unicode en email, países con restricciones legales (KYC, GDPR).
 
-**Resultado:** En lugar de probar 5 × 7 × 6 × 3 × 2 = **1,260 combinaciones exhaustivas**, obtenemos ~**25-30 casos** bien diseñados.
+**Cálculo del ahorro:**
+
+$$
+\underbrace{5 \times 7 \times 6 \times 3 \times 2}_{= 1260\ \text{casos exhaustivos}}
+\quad\Longrightarrow\quad
+\underbrace{\sim 25\text{–}30}_{\text{casos diseñados}}
+$$
+
+> **✅ Buena práctica**
+> En la práctica casi **nunca** usás una sola técnica. La firma de un QA senior es saber **componer**: EP para clases, BVA para bordes, pairwise para configuraciones, decision table para lógica, state transition para ciclos.
 
 ---
 
-## 2.12 Paso 5: derivar los casos de prueba
+## 2.12 Anatomía de un caso de prueba bien escrito
 
-Una vez que tengo:
+Una vez que tenés particiones, límites y combinaciones relevantes, **recién ahí** escribís los casos.
 
-- particiones,
-- límites,
-- combinaciones relevantes,
-
-recién ahí escribo los casos.
-
-Estructura que recomiendo:
+**Listing 2.12** — Plantilla recomendada (compatible con TestRail, Xray, Zephyr).
 
 ```text
 ID: CT-REGISTRO-001
-Titulo: Registrar usuario con datos validos
-Proposito: Validar que el sistema acepta datos minimos y crea el usuario
+Título: Registrar usuario con datos válidos
+Propósito: Validar que el sistema acepta datos mínimos y crea el usuario
 Precondiciones:
   - No existe un usuario con ese correo
 Pasos:
   1. Abrir pantalla de registro
-  2. Completar nombre, correo y password valido
+  2. Completar nombre, correo y password válido
   3. Enviar formulario
 Resultado esperado:
   - El sistema crea el usuario
-  - Se muestra mensaje de exito
-Riesgo cubierto: flujo feliz
-Automatizable: si
+  - Se muestra mensaje de éxito
+Riesgo cubierto: flujo feliz de onboarding
+Automatizable: sí (Playwright + API setup)
 ```
 
-> Aclaración
-> El libro de _Effective Software Testing_ insiste en separar **diseño** de **ejecución** y de **automatización**. El test nace aquí, en el diseño. La automatización es solo la forma de ejecutarlo muchas veces. Si saltás directo a Playwright sin este paso, tu suite va a crecer desordenada.
+> **Aclaración**
+> Aniche (2022) insiste en separar **diseño** de **ejecución** y de **automatización**. El test nace en el diseño. La automatización es solo cómo ejecutarlo muchas veces. Si saltás directo a Playwright sin este paso, tu suite va a crecer desordenada y frágil.
 
 ---
 
-## 2.13 Ejemplo completo con TypeScript
+## 2.13 Ejemplo integrador con TypeScript
 
-Supongamos que tenemos un servicio que calcula el precio de un envío:
+Vamos a juntar **todo** el pipeline en un caso completo: un servicio que calcula el precio de un envío.
+
+**Listing 2.13** — Sistema bajo prueba.
 
 ```typescript
 type ShippingType = "standard" | "express" | "international";
@@ -1305,119 +1298,175 @@ export function calculateShipping(req: ShippingRequest): number {
 
   let base = 10;
 
-  if (req.type === "express") {
-    base += 15;
-  } else if (req.type === "international") {
-    base += 25;
-  }
+  if (req.type === "express")          base += 15;
+  else if (req.type === "international") base += 25;
 
-  if (req.weightKg > 20) {
-    base += 20;
-  }
-
-  if (req.country !== "AR") {
-    base += 5;
-  }
-
-  if (req.discountCode === "AIKO10") {
-    base = base * 0.9;
-  }
+  if (req.weightKg > 20)               base += 20;   // recargo por peso
+  if (req.country !== "AR")            base += 5;    // recargo por país
+  if (req.discountCode === "AIKO10")   base = base * 0.9;
 
   return base;
 }
 ```
 
-Casos resultantes (resumen):
+### 2.13.1 Variables y particiones
 
-1. Peso <= 0 -> debe lanzar error.
-2. Peso 10, standard, AR, sin descuento -> base 10.
-3. Peso 10, express, AR, sin descuento -> 25.
-4. Peso 10, international, AR, sin descuento -> 35.
-5. Peso 25, standard, AR, sin descuento -> 30.
-6. Peso 25, international, no AR, sin descuento -> 60.
-7. Peso 10, express, no AR, con AIKO10 -> 27.
+| Variable | Particiones |
+| --- | --- |
+| `weightKg` | inválido (≤ 0), liviano (1–20), pesado (> 20) |
+| `country` | local (`AR`), no local (`!= AR`) |
+| `type` | `standard`, `express`, `international` |
+| `discountCode` | ausente, `AIKO10`, código no reconocido |
 
-> Nota
-> Fijate que todos los casos tienen una razón. No hay “probar con 5 kg porque sí”. Esto es lo que diferencia una suite hecha a mano de una suite **diseñada**.
+### 2.13.2 Casos derivados
 
----
+**Tabla 2.11** — Cobertura mínima razonable (combina EP + BVA + relaciones).
 
-## 2.10 Cómo documentar las “notas del tester”
+| # | Caso | Riesgo cubierto | Resultado esperado |
+| --- | --- | --- | --- |
+| 1 | `weight = 0` | EP inválida (peso) | `Error("Invalid weight")` |
+| 2 | `weight = 10`, `standard`, `AR`, sin código | Caso feliz local | `10` |
+| 3 | `weight = 10`, `express`, `AR`, sin código | Recargo express | `25` |
+| 4 | `weight = 10`, `international`, `AR`, sin código | Recargo internacional | `35` |
+| 5 | `weight = 25`, `standard`, `AR`, sin código | Recargo por peso | `30` |
+| 6 | `weight = 25`, `international`, no `AR`, sin código | Combinación de recargos | `60` |
+| 7 | `weight = 10`, `express`, no `AR`, `AIKO10` | Descuento aplicado a recargos | `27` |
 
-Podés usar citas de Markdown así:
-
-> Observacion del tester
-> En mobile con red lenta, la pantalla de pago tarda demasiado y no hay loader. Esto no es un bug funcional pero es una condicion de prueba que deberiamos repetir.
-
-> Nota tecnica
-> Este endpoint devuelve 200 aun cuando el dato no existe. Hablar con backend para ver si se puede devolver 404 o 204.
-
-> Riesgo detectado
-> Si agregamos un nuevo tipo de envio, todos los tests que dependen del enum "ShippingType" van a romper. Conviene centralizar fixtures.
+> **💡 Idea clave**
+> Cada caso tiene una **razón explícita**. Ningún _"probar con 5 kg porque sí"_. Esa es la diferencia entre una suite hecha a mano y una suite **diseñada**.
 
 ---
 
-## 2.15 Relación con automatización (avanzado)
+## 2.14 Cómo documentar las "notas del tester"
 
-> Nota
-> La automatización solo tiene valor a partir de la segunda corrida. La primera vez el valor lo puso el humano que diseñó el test. Si tu diseño es pobre, tu automatización va a ser pobre. Esto parece obvio, pero lo he visto repetirse en empresas de Estados Unidos y también en pymes de Argentina: el problema no era Selenium, era el diseño.
+Tu cuaderno mental tiene tanto valor como los casos formales. Markdown te permite documentarlo así:
 
----
+> **Observación del tester**
+> En mobile con red lenta, la pantalla de pago tarda demasiado y no hay loader. **No es un bug funcional**, pero es una condición de prueba que deberíamos repetir y elevar como riesgo de UX.
 
-## 2.16 Resumen del capítulo
+> **Nota técnica**
+> Este endpoint devuelve `200 OK` aun cuando el dato no existe. Hablar con backend para evaluar `404 Not Found` o `204 No Content`.
 
-En este capítulo vimos que:
-
-- Diseñar tests es **reducir un espacio infinito de pruebas** a un conjunto manejable y con sentido.
-- El **Oracle Problem** (Weyuker, 1982) nos recuerda que determinar la corrección es un desafío fundamental del testing.
-- **Particiones de Equivalencia** reducen casos redundantes agrupando inputs que se comportan igual.
-- **Boundary Value Analysis** detecta 35-40% más defectos que testing aleatorio (Kaner et al., 1999).
-- **Tablas de Decisión** modelan lógica de negocio compleja con múltiples condiciones.
-- **State Transition Testing** cubre workflows y ciclos de vida de objetos.
-- **Pairwise Testing** reduce testing combinatorio de miles de casos a decenas, cubriendo ~90% de defectos (NIST, 2004).
-- Las técnicas de especificación (particiones, límites, relaciones) no son académicas: son las que te permiten automatizar después sin que la suite explote.
-- La buena documentación de pruebas incluye **notas y observaciones** además de los casos formales.
-- **El diseño va primero, la herramienta después.**
+> **⚠️ Riesgo detectado**
+> Si agregamos un nuevo tipo de envío, todos los tests que dependen del enum `ShippingType` van a romper. Conviene **centralizar fixtures** y crear factories.
 
 ---
 
-## Referencias
+## 2.15 Relación con automatización (avance)
 
-### Libros Fundamentales
+> **Verdad incómoda**
+> La **automatización solo tiene valor a partir de la segunda corrida**. La primera vez el valor lo puso el humano que diseñó el test. Si tu diseño es pobre, tu automatización va a ser pobre. Esto lo vi repetirse en empresas Fortune 500 y en startups de Argentina por igual: el problema **nunca era Selenium o Playwright**, era el diseño.
 
-1. **Myers, Glenford J., Sandler, Corey & Badgett, Tom** (2011). *The Art of Software Testing, 3rd Edition*. Wiley. ISBN: 978-1118031964.
+En la **Parte III** de este libro (Automatización inteligente) vamos a tomar exactamente los casos que diseñaste con este pipeline y los vamos a llevar a Playwright, Postman/Newman y Jest sin perder rastreabilidad.
 
-2. **Jorgensen, Paul C.** (2013). *Software Testing: A Craftsman's Approach, 4th Edition*. CRC Press. ISBN: 978-1466560680.
+---
 
-3. **Copeland, Lee** (2003). *A Practitioner's Guide to Software Test Design*. Artech House. ISBN: 978-1580537919.
+# Cierre del capítulo
 
-4. **Binder, Robert V.** (1999). *Testing Object-Oriented Systems: Models, Patterns, and Tools*. Addison-Wesley. ISBN: 978-0201809381.
+## Resumen ejecutivo
 
-5. **Kaner, Cem, Falk, Jack & Nguyen, Hung Q.** (1999). *Testing Computer Software, 2nd Edition*. Wiley. ISBN: 978-0471358466.
 
-6. **Aniche, Maurício** (2022). *Effective Software Testing: A Developer's Guide*. Manning Publications. ISBN: 978-1633439931.
+En este capítulo pasamos de **probar por intuición** a **diseñar con método**. Los siete movimientos clave que tu cerebro debería hacer automáticamente al recibir un requisito:
 
-### Papers y Estudios Científicos
+1. **Leé** la especificación y traducíla a **variables de entrada / salida**.
+2. **Particioná** el dominio en clases de equivalencia (válidas, inválidas, especiales).
+3. **Detectá los bordes** de cada partición y aplicale BVA.
+4. **Combiná** parámetros con tablas de decisión (lógica) o pairwise (configuraciones).
+5. **Modelá** el ciclo de vida con state transition cuando haya estados observables.
+6. **Componé oráculos** parciales cuando no haya un oracle perfecto.
+7. **Marcá cuáles automatizás** según riesgo × frecuencia, no por moda.
 
-7. **Weyuker, Elaine J.** (1982). "On Testing Non-Testable Programs". *The Computer Journal*, 25(4), 465-470. doi:10.1093/comjnl/25.4.465
+> **Idea fuerza**
+> Diseñar tests es **reducir un espacio infinito de pruebas a un conjunto finito y justificable**. La calidad de esa reducción es la métrica que distingue al QA empírico del QA Engineer.
 
-8. **Barr, Earl T., Harman, Mark, McMinn, Phil, Shahbaz, Muzammil & Yoo, Shin** (2015). "The Oracle Problem in Software Testing: A Survey". *IEEE Transactions on Software Engineering*, 41(5), 507-525. doi:10.1109/TSE.2014.2372785
+---
 
-9. **Kuhn, D. Richard, Wallace, Dolores R. & Gallo, Albert M.** (2004). "Software Fault Interactions and Implications for Software Testing". *IEEE Transactions on Software Engineering*, 30(6), 418-421. doi:10.1109/TSE.2004.24
+## ✅ Checklist del QA: ¿mi caso está bien diseñado?
 
-10. **Cohen, David M., Dalal, Siddhartha R., Fredman, Michael L. & Patton, Gardner C.** (1997). "The AETG System: An Approach to Testing Based on Combinatorial Design". *IEEE Transactions on Software Engineering*, 23(7), 437-444. doi:10.1109/32.605761
+Antes de declararlo "listo" pasá esta checklist mental:
 
-11. **Grindal, Mats, Offutt, Jeff & Andler, Sten F.** (2005). "Combination Testing Strategies: A Survey". *Software Testing, Verification and Reliability*, 15(3), 167-199. doi:10.1002/stvr.319
+- [ ] ¿Puedo nombrar las **4 piezas** (contexto, acción, oráculo, propósito)?
+- [ ] ¿El **propósito** del caso está escrito y dice qué **riesgo** cubre?
+- [ ] ¿Identifiqué todas las **variables** del requisito, incluso las implícitas?
+- [ ] ¿Tengo al menos un caso por cada **partición** (válidas + inválidas)?
+- [ ] ¿Apliqué BVA a los **bordes** de cada rango numérico o temporal?
+- [ ] ¿Modelé las **transiciones inválidas** (no solo las felices)?
+- [ ] Si hay 5+ parámetros: ¿usé **pairwise** en lugar de combinatorio total?
+- [ ] ¿El test es **determinista** (no depende del reloj, red ni orden de ejecución)?
+- [ ] ¿Otro QA podría **reproducirlo** leyendo solo el caso?
 
-### Estándares y Especificaciones
+---
 
-12. **IEEE** (2008). *IEEE 829-2008 - Standard for Software and System Test Documentation*. Institute of Electrical and Electronics Engineers.
+## Ejercicios prácticos
 
-13. **ISO/IEC/IEEE** (2013). *ISO/IEC/IEEE 29119 - Software Testing Standard*. International Organization for Standardization.
+> **Ejercicio 2.1 — Particiones**
+> Escribí las particiones de equivalencia para `validarPassword(p: string)` cuya regla es: 8–64 caracteres, al menos 1 mayúscula, 1 minúscula, 1 dígito y 1 símbolo. Identificá al menos 8 particiones, marcando válidas e inválidas.
 
-14. **ISTQB** (2018). *ISTQB Foundation Level Syllabus - Test Design Techniques*. International Software Testing Qualifications Board.
+> **Ejercicio 2.2 — BVA**
+> Para la misma `validarPassword`, listá los **valores límite** que probás. ¿Cuántos casos te dan? Justificá si elegirías Normal, Robust o Worst-Case BVA.
 
-### Recursos Técnicos
+> **Ejercicio 2.3 — Tabla de decisión**
+> Modelá la política de descuentos de un e-commerce: `cliente premium`, `monto > $1000`, `cupón válido`, `primera compra`. Acciones: `10 %`, `15 %`, `20 %`, `sin descuento`. Construí la tabla y derivá los casos.
+
+> **Ejercicio 2.4 — State transition**
+> Dibujá la máquina de estados de un **pedido de Uber Eats** (creado, asignado, en preparación, en camino, entregado, cancelado). Identificá las transiciones inválidas y diseñá al menos 3 tests para ellas.
+
+> **Ejercicio 2.5 — Pairwise**
+> Pensá una app móvil con 5 parámetros de configuración (3 valores cada uno). Calculá el costo del test exhaustivo y, usando PICT u otra herramienta, generá el set pairwise. Compará costo vs cobertura esperada.
+
+---
+
+## Conexión con el resto del libro
+
+| Si te interesó… | Saltá a |
+| --- | --- |
+| Profundizar en oráculos derivados | Cap. 5 — Property-based testing |
+| Entender qué cubrió _realmente_ tu suite | Cap. 4 — Cobertura estructural |
+| Llevar todo esto a Playwright / Postman | Parte III — Automatización inteligente |
+| Discutir riesgo y prioridad con el equipo | Parte IV — Estrategia y cultura |
+
+> **Antes de pasar al capítulo siguiente**
+> Revisá una suite de tests **real** del proyecto en el que trabajás y mapeala contra el pipeline de 7 pasos. ¿Qué pasos faltan? ¿Qué técnica resolvería los huecos? Esa auditoría —honesta— es probablemente el ejercicio más valioso del capítulo.
+
+---
+
+## Referencias bibliográficas
+
+### Libros fundamentales
+
+1. **Myers, Glenford J., Sandler, Corey & Badgett, Tom** (2011). _The Art of Software Testing, 3rd Edition_. Wiley. ISBN: 978-1118031964.
+
+2. **Jorgensen, Paul C.** (2013). _Software Testing: A Craftsman's Approach, 4th Edition_. CRC Press. ISBN: 978-1466560680.
+
+3. **Copeland, Lee** (2003). _A Practitioner's Guide to Software Test Design_. Artech House. ISBN: 978-1580537919.
+
+4. **Binder, Robert V.** (1999). _Testing Object-Oriented Systems: Models, Patterns, and Tools_. Addison-Wesley. ISBN: 978-0201809381.
+
+5. **Kaner, Cem, Falk, Jack & Nguyen, Hung Q.** (1999). _Testing Computer Software, 2nd Edition_. Wiley. ISBN: 978-0471358466.
+
+6. **Aniche, Maurício** (2022). _Effective Software Testing: A Developer's Guide_. Manning Publications. ISBN: 978-1633439931.
+
+### Papers y estudios científicos
+
+7. **Weyuker, Elaine J.** (1982). "On Testing Non-Testable Programs". _The Computer Journal_, 25(4), 465-470. doi:10.1093/comjnl/25.4.465
+
+8. **Barr, Earl T., Harman, Mark, McMinn, Phil, Shahbaz, Muzammil & Yoo, Shin** (2015). "The Oracle Problem in Software Testing: A Survey". _IEEE Transactions on Software Engineering_, 41(5), 507-525. doi:10.1109/TSE.2014.2372785
+
+9. **Kuhn, D. Richard, Wallace, Dolores R. & Gallo, Albert M.** (2004). "Software Fault Interactions and Implications for Software Testing". _IEEE Transactions on Software Engineering_, 30(6), 418-421. doi:10.1109/TSE.2004.24
+
+10. **Cohen, David M., Dalal, Siddhartha R., Fredman, Michael L. & Patton, Gardner C.** (1997). "The AETG System: An Approach to Testing Based on Combinatorial Design". _IEEE Transactions on Software Engineering_, 23(7), 437-444. doi:10.1109/32.605761
+
+11. **Grindal, Mats, Offutt, Jeff & Andler, Sten F.** (2005). "Combination Testing Strategies: A Survey". _Software Testing, Verification and Reliability_, 15(3), 167-199. doi:10.1002/stvr.319
+
+### Estándares y especificaciones
+
+12. **IEEE** (2008). _IEEE 829-2008 - Standard for Software and System Test Documentation_. Institute of Electrical and Electronics Engineers.
+
+13. **ISO/IEC/IEEE** (2013). _ISO/IEC/IEEE 29119 - Software Testing Standard_. International Organization for Standardization.
+
+14. **ISTQB** (2018). _ISTQB Foundation Level Syllabus - Test Design Techniques_. International Software Testing Qualifications Board.
+
+### Recursos técnicos
 
 15. **NIST** (National Institute of Standards and Technology). "Combinatorial Testing". https://csrc.nist.gov/projects/automated-combinatorial-testing-for-software
 
@@ -1427,4 +1476,7 @@ En este capítulo vimos que:
 
 ---
 
-> 💡 **Nota final:** Este capítulo cubre las técnicas fundamentales del diseño de tests basado en especificaciones. En el siguiente capítulo veremos **testing estructural** (caja blanca), donde usamos el código fuente para guiar el diseño de pruebas.
+> **Nota final — Próximo capítulo**
+> Este capítulo cubrió las técnicas fundamentales del **diseño de tests basado en especificaciones** (caja negra). En el [Capítulo 3](../parte2-tecnicas-clave/03-testing-basado-en-especificaciones.md) profundizamos en specification-based testing y en el [Capítulo 4](../parte2-tecnicas-clave/04-testing-estructural-y-cobertura.md) cruzamos la línea hacia **testing estructural** (caja blanca), donde el código fuente guía el diseño de pruebas.
+>
+> Nos vemos del otro lado del cristal. 
